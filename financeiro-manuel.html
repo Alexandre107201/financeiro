@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0057)file:///C:/Users/manue/Downloads/financeiro-manuel_1.html -->
+<!-- saved from url=(0057)file:///C:/Users/manue/Downloads/financeiro-manuel_2.html -->
 <html lang="pt-BR"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#F5F5F0">
 <title>Financeiro</title>
-<link href="./Financeiro novo_files/css2" rel="stylesheet">
+<link href="./Financeiro novo versao 3 _files/css2" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #F5F5F0; color: #1A1A22; font-family: 'DM Mono', 'Courier New', monospace; min-height: 100vh; padding-bottom: 80px; -webkit-tap-highlight-color: transparent; }
@@ -103,6 +103,20 @@
   #mb16 { margin-bottom: 16px; }
   #mb20 { margin-bottom: 20px; }
   #mb24 { margin-bottom: 24px; }
+
+  .voice-btn { width: 100%; padding: 14px; border: 2px solid #F5C542; border-radius: 10px; cursor: pointer; background: transparent; color: #F5C542; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; letter-spacing: 1px; transition: all .3s; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .voice-btn.listening { background: #FF4757; border-color: #FF4757; color: #fff; animation: pulse 1s infinite; }
+  .voice-btn.processing { background: #F5C542; border-color: #F5C542; color: #000; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+  .voice-result { background: #FFFFFF; border: 1px solid #E0DFD9; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; font-size: 13px; color: #444; display: none; }
+  .voice-result.show { display: block; }
+  .voice-result-text { color: #1A1A22; font-size: 14px; margin-bottom: 8px; font-style: italic; }
+  .voice-result-label { font-size: 10px; color: #999; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }
+
+  .photo-btn { width: 100%; padding: 14px; border: 2px solid #4A9EFF; border-radius: 10px; cursor: pointer; background: transparent; color: #4A9EFF; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; letter-spacing: 1px; transition: all .3s; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .photo-btn.processing { background: #4A9EFF; color: #fff; }
+  .photo-preview { width: 100%; max-height: 180px; object-fit: cover; border-radius: 10px; margin-bottom: 8px; display: none; border: 1px solid #E0DFD9; }
+  .photo-preview.show { display: block; }
 </style>
 </head>
 <body>
@@ -175,6 +189,32 @@
       <span class="label">Obs (opcional)</span>
       <input id="input-note" class="input" type="text" placeholder="Ex: NF 1234, parcela 3/12, ref maio...">
     </div>
+
+    <!-- VOICE -->
+    <div style="margin-bottom:8px">
+      <button id="voice-btn" class="voice-btn" onclick="toggleVoice()">
+        <span id="voice-icon">🎤</span>
+        <span id="voice-label">Lançar por voz</span>
+      </button>
+      <div id="voice-result" class="voice-result">
+        <div class="voice-result-label">Você disse:</div>
+        <div id="voice-transcript" class="voice-result-text"></div>
+        <div id="voice-status" style="font-size:11px;color:#999"></div>
+      </div>
+    </div>
+
+
+    <!-- PHOTO -->
+    <input type="file" id="photo-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoUpload(event)">
+    <div style="margin-bottom:8px">
+      <button id="photo-btn" class="photo-btn" onclick="document.getElementById(&#39;photo-input&#39;).click()">
+        <span id="photo-icon">📷</span>
+        <span id="photo-label">Enviar comprovante</span>
+      </button>
+      <img id="photo-preview" class="photo-preview" alt="preview">
+      <div id="photo-status" style="font-size:11px;color:#999;margin-bottom:8px;display:none"></div>
+    </div>
+
     <button id="register-btn" class="register-btn" onclick="addEntry()">Registrar</button>
   </div>
 
@@ -659,6 +699,310 @@ function updateExportBtn() {
 }
 
 init();
+
+// ===== VOICE INPUT =====
+let recognition = null;
+let isListening = false;
+
+function toggleVoice() {
+  if (isListening) {
+    stopVoice();
+  } else {
+    startVoice();
+  }
+}
+
+function startVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert('Seu navegador não suporta reconhecimento de voz. Use o Chrome.');
+    return;
+  }
+  recognition = new SpeechRecognition();
+  recognition.lang = 'pt-BR';
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  recognition.onstart = () => {
+    isListening = true;
+    document.getElementById('voice-btn').classList.add('listening');
+    document.getElementById('voice-icon').textContent = '⏹';
+    document.getElementById('voice-label').textContent = 'Ouvindo... toque para parar';
+    document.getElementById('voice-result').classList.remove('show');
+  };
+
+  recognition.onresult = (e) => {
+    const transcript = e.results[0][0].transcript;
+    document.getElementById('voice-transcript').textContent = '"' + transcript + '"';
+    document.getElementById('voice-result').classList.add('show');
+    document.getElementById('voice-status').textContent = 'Processando...';
+    processVoiceInput(transcript);
+  };
+
+  recognition.onerror = (e) => {
+    stopVoice();
+    document.getElementById('voice-status').textContent = 'Erro: ' + e.error + '. Tente novamente.';
+    document.getElementById('voice-result').classList.add('show');
+  };
+
+  recognition.onend = () => { stopVoice(); };
+  recognition.start();
+}
+
+function stopVoice() {
+  isListening = false;
+  if (recognition) { try { recognition.stop(); } catch(e){} }
+  document.getElementById('voice-btn').classList.remove('listening');
+  document.getElementById('voice-btn').classList.remove('processing');
+  document.getElementById('voice-icon').textContent = '🎤';
+  document.getElementById('voice-label').textContent = 'Lançar por voz';
+}
+
+async function processVoiceInput(transcript) {
+  const btn = document.getElementById('voice-btn');
+  btn.classList.add('processing');
+  document.getElementById('voice-label').textContent = 'Interpretando...';
+
+  // Try AI first
+  try {
+    const catList = Object.entries(categories).map(([cat, subs]) =>
+      cat + ': ' + subs.join(', ')
+    ).join('\n');
+
+    const prompt = `Você é um assistente de controle financeiro pessoal. 
+O usuário disse por voz: "${transcript}"
+
+Categorias disponíveis:
+${catList}
+
+Extraia as informações e responda APENAS com JSON válido neste formato exato:
+{"valor": 150.00, "tipo": "saida", "categoria": "🚗 Carro", "subcategoria": "Gasolina", "obs": ""}
+
+Regras:
+- valor: número decimal (ex: 150.00). Se não mencionado, use 0.
+- tipo: "saida" ou "entrada". Padrão é "saida".
+- categoria: deve ser exatamente uma das categorias listadas acima.
+- subcategoria: deve ser exatamente uma das subcategorias da categoria escolhida.
+- obs: qualquer detalhe adicional mencionado.
+- Palavras como "recebi", "entrada", "aluguel recebido" indicam tipo "entrada".`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 300,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[^}]+\}/s);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      applyVoiceResult(parsed);
+      document.getElementById('voice-status').textContent = '✓ Alocado automaticamente pela IA';
+      btn.classList.remove('processing');
+      document.getElementById('voice-label').textContent = 'Lançar por voz';
+      return;
+    }
+  } catch(e) {
+    // Fall through to local parsing
+  }
+
+  // Local fallback parsing
+  const result = parseVoiceLocal(transcript);
+  applyVoiceResult(result);
+  document.getElementById('voice-status').textContent = '✓ Preenchido — confira e ajuste se necessário';
+  btn.classList.remove('processing');
+  document.getElementById('voice-label').textContent = 'Lançar por voz';
+}
+
+function parseVoiceLocal(text) {
+  const lower = text.toLowerCase();
+  // Extract value
+  let valor = 0;
+  const numMatch = text.match(/(\d+(?:[,.]\d{1,2})?)/);
+  if (numMatch) valor = parseFloat(numMatch[1].replace(',', '.'));
+
+  // Detect type
+  let tipo = 'saida';
+  if (/recebi|entrada|aluguel recebido|recebimento|pagaram/.test(lower)) tipo = 'entrada';
+
+  // Match category by keywords
+  const keymap = [
+    ['gasolina|posto|combustível|abastec', '🚗 Carro', 'Gasolina'],
+    ['pneu|borracharia|bono', '🚗 Carro', 'Manutenção/Pneus'],
+    ['moto', '🏍️ Moto', 'Gasolina'],
+    ['mercado|supermercado|compra|feira', '👤 Pessoal', 'Mercado/Casa'],
+    ['restaurante|almoço|jantar|lanche|pizza|sushi|coco bambu', '👤 Pessoal', 'Alimentação fora'],
+    ['farmácia|remédio|medicamento|drogasil', '💊 Saúde & Bem-estar', 'Farmácia/Medicamentos'],
+    ['suplemento|puravida|essential|whey', '💊 Saúde & Bem-estar', 'Suplementos (Puravida/Essential/etc)'],
+    ['academia|bodytech|body tech', '💊 Saúde & Bem-estar', 'Academia (Body Tech)'],
+    ['massagem|danielle', '💊 Saúde & Bem-estar', 'Massagem (Danielle)'],
+    ['médico|consulta|exame|ipac', '💊 Saúde & Bem-estar', 'Médico/Exames (IPAC)'],
+    ['netflix', '📱 Assinaturas Digitais', 'Netflix'],
+    ['spotify', '📱 Assinaturas Digitais', 'Spotify'],
+    ['youtube', '📱 Assinaturas Digitais', 'YouTube Premium'],
+    ['chatgpt|chat gpt', '📱 Assinaturas Digitais', 'ChatGPT'],
+    ['jiu|ananda|jiujitsu|jiu-jitsu', '🎓 Educação', 'Jiu-Jitsu (Ananda)'],
+    ['inglês|geane|aula de inglês', '🎓 Educação', 'Inglês (Geane)'],
+    ['rancho|condomínio rancho', '🏡 Rancho', 'Condomínio'],
+    ['cemig rancho', '🏡 Rancho', 'CEMIG Rancho'],
+    ['cyrela|construção|obra', '🏠 Casa Cyrela', 'Obra/Construção'],
+    ['material|materiais cyrela', '🏠 Casa Cyrela', 'Materiais'],
+    ['universitá|airbnb|mrv|caixa financiamento', '🏙️ Apto Universitá', 'Financiamento MRV/Caixa'],
+    ['varanda sul|aluguel varanda', '🏘️ Casa Varanda Sul', 'Aluguel'],
+    ['iptu', '📋 Impostos & Taxas', 'IPTU'],
+    ['ipva', '📋 Impostos & Taxas', 'IPVA'],
+    ['consórcio|consorcio', '🎰 Consórcios', 'Outros Consórcios'],
+    ['seguro', '🛡️ Seguros & Previdência', 'Outros Seguros'],
+    ['vila fit', '🏢 Vila Fit', 'Outros Vila Fit'],
+    ['vila gourmet', '🍽️ Vila Gourmet', 'Outros Vila Gourmet'],
+    ['vila sabor', '🥗 Vila Sabor', 'Outros Vila Sabor'],
+    ['aluguel recebido|recebi aluguel', '➕ Receitas', 'Aluguel Recebido'],
+    ['luz|energia|cemig', '📋 Impostos & Taxas', 'Outros Impostos'],
+    ['água|dmae', '📋 Impostos & Taxas', 'Outros Impostos'],
+    ['passagem|voo|gol|latam|azul', '✈️ Viagem & Lazer', 'Passagens Aéreas'],
+    ['hotel|hospedagem', '✈️ Viagem & Lazer', 'Hotel/Hospedagem'],
+    ['roupa|camisa|calça|tênis', '👤 Pessoal', 'Roupas/Vestuário'],
+  ];
+
+  let categoria = selectedCat;
+  let subcategoria = selectedSub;
+
+  for (const [pattern, cat, sub] of keymap) {
+    if (new RegExp(pattern).test(lower)) {
+      if (categories[cat]) {
+        categoria = cat;
+        subcategoria = categories[cat].includes(sub) ? sub : categories[cat][0];
+        break;
+      }
+    }
+  }
+
+  return { valor, tipo, categoria, subcategoria, obs: '' };
+}
+
+function applyVoiceResult(parsed) {
+  if (parsed.valor && parsed.valor > 0) {
+    document.getElementById('input-value').value = parsed.valor;
+  }
+  if (parsed.tipo) setType(parsed.tipo);
+  if (parsed.categoria && categories[parsed.categoria]) {
+    selectCat(parsed.categoria);
+    if (parsed.subcategoria && categories[parsed.categoria].includes(parsed.subcategoria)) {
+      selectSub(parsed.subcategoria);
+    }
+  }
+  if (parsed.obs) {
+    document.getElementById('input-note').value = parsed.obs;
+  }
+}
+
+
+// ===== PHOTO / COMPROVANTE =====
+async function handlePhotoUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  // Show preview
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const preview = document.getElementById('photo-preview');
+    preview.src = e.target.result;
+    preview.classList.add('show');
+  };
+  reader.readAsDataURL(file);
+
+  // Set processing state
+  const btn = document.getElementById('photo-btn');
+  const statusEl = document.getElementById('photo-status');
+  btn.classList.add('processing');
+  document.getElementById('photo-icon').textContent = '⏳';
+  document.getElementById('photo-label').textContent = 'Analisando imagem...';
+  statusEl.style.display = 'block';
+  statusEl.textContent = 'Enviando para a IA...';
+
+  try {
+    // Convert to base64
+    const base64 = await new Promise((resolve) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result.split(',')[1]);
+      r.readAsDataURL(file);
+    });
+
+    const mediaType = file.type || 'image/jpeg';
+
+    const catList = Object.entries(categories).map(([cat, subs]) =>
+      cat + ': ' + subs.join(', ')
+    ).join('\n');
+
+    const prompt = `Você é um assistente de controle financeiro. Analise este comprovante/nota fiscal/boleto.
+
+Categorias disponíveis:
+${catList}
+
+Extraia as informações e responda APENAS com JSON válido neste formato:
+{"valor": 150.00, "tipo": "saida", "categoria": "🚗 Carro", "subcategoria": "Gasolina", "obs": "descrição breve", "data": "2026-06-05"}
+
+Regras:
+- valor: valor total pago (número decimal)
+- tipo: "saida" para pagamentos, "entrada" para recebimentos
+- categoria: exatamente uma das categorias listadas
+- subcategoria: exatamente uma das subcategorias da categoria escolhida
+- obs: estabelecimento ou descrição resumida
+- data: data do comprovante no formato YYYY-MM-DD (se não encontrar, use "")
+- Se não conseguir identificar o valor, use 0`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 400,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data: base64 }
+            },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*?\}/);
+
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      applyVoiceResult(parsed);
+      if (parsed.data && parsed.data.match(/\d{4}-\d{2}-\d{2}/)) {
+        document.getElementById('input-date').value = parsed.data;
+      }
+      statusEl.textContent = '✓ Comprovante lido e alocado automaticamente!';
+      statusEl.style.color = '#2ED573';
+    } else {
+      statusEl.textContent = '⚠ Não consegui ler todos os dados. Preencha manualmente.';
+      statusEl.style.color = '#FF9500';
+    }
+  } catch(e) {
+    statusEl.textContent = '⚠ Erro ao processar. Verifique sua conexão.';
+    statusEl.style.color = '#FF4757';
+  }
+
+  btn.classList.remove('processing');
+  document.getElementById('photo-icon').textContent = '📷';
+  document.getElementById('photo-label').textContent = 'Enviar comprovante';
+  // Reset file input so same file can be sent again
+  document.getElementById('photo-input').value = '';
+}
+
 </script>
 
 
