@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0057)file:///C:/Users/manue/Downloads/financeiro-manuel_9.html -->
+<!-- saved from url=(0058)file:///C:/Users/manue/Downloads/financeiro-manuel_11.html -->
 <html lang="pt-BR"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#F5F5F0">
 <title>Financeiro</title>
-<link href="./Financeiro novo versao 7 _files/css2" rel="stylesheet">
+<link href="./Financeiro novo versao 8 _files/css2" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#F5F5F0;color:#1A1A22;font-family:'DM Mono','Courier New',monospace;min-height:100vh;padding-bottom:80px;-webkit-tap-highlight-color:transparent}
@@ -108,6 +108,25 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .add-sub-inp{flex:1;background:#fff;border:1px solid #DDDCD6;border-radius:8px;padding:10px 12px;color:#1A1A1A;font-size:12px;outline:none}
 .add-sub-btn{padding:10px 16px;background:#F5F5F0;border:1px solid #F5C542;border-radius:8px;color:#c9a100;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer}
 .empty{text-align:center;color:#ccc;padding:40px;font-size:13px}
+
+.import-opt{display:flex;gap:8px;margin-bottom:16px}
+.import-btn{flex:1;padding:16px 8px;border:2px solid #DDDCD6;border-radius:10px;cursor:pointer;background:#fff;color:#666;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:6px;transition:all .2s}
+.import-btn:active{border-color:#F5C542}
+.import-icon{font-size:24px}
+.import-status{font-size:12px;color:#888;margin:12px 0;text-align:center;display:none}
+.import-status.show{display:block}
+.imp-row{background:#fff;border:1px solid #E0DFD9;border-radius:10px;padding:12px 14px;margin-bottom:8px}
+.imp-row-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.imp-row-desc{font-size:12px;color:#1A1A1A;flex:1}
+.imp-row-val{font-family:'Syne',sans-serif;font-weight:700;font-size:14px;margin-left:8px}
+.imp-row-val.saida{color:#FF4757}
+.imp-row-val.entrada{color:#2ED573}
+.imp-select{width:100%;padding:8px 10px;border:1px solid #DDDCD6;border-radius:6px;font-size:11px;font-family:'DM Mono',monospace;color:#444;background:#F5F5F0;margin-bottom:4px}
+.imp-row-date{font-size:10px;color:#999}
+.imp-actions{display:flex;gap:8px;margin-top:16px;position:sticky;bottom:10px}
+.imp-confirm{flex:1;padding:14px;background:#2ED573;border:none;border-radius:10px;color:#000;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer}
+.imp-cancel{padding:14px 20px;background:#F5F5F0;border:1px solid #E0DFD9;border-radius:10px;color:#888;cursor:pointer;font-size:13px}
+.imp-skip{font-size:10px;color:#FF9500;cursor:pointer;margin-left:8px}
 </style>
 </head>
 <body>
@@ -143,7 +162,10 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div class="header-sub">Controle</div>
     <div class="header-title">Financeiro</div>
   </div>
-  <div id="hdr-date" class="header-date">Seg, 8 Jun</div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+    <div id="hdr-date" class="header-date">Seg, 8 Jun</div>
+    <button onclick="exportCSV()" style="padding:6px 12px;border:1px solid #F5C542;border-radius:20px;background:transparent;color:#c9a100;font-size:10px;letter-spacing:1px;cursor:pointer;font-family:&#39;DM Mono&#39;,monospace;white-space:nowrap">⬇ Backup CSV</button>
+  </div>
 </div>
 
 <!-- NAV -->
@@ -151,6 +173,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   <button class="nav-btn active" onclick="setView(&#39;add&#39;)" id="nav-add">+ Lançar</button>
   <button class="nav-btn" onclick="setView(&#39;list&#39;)" id="nav-list">Histórico</button>
   <button class="nav-btn" onclick="setView(&#39;summary&#39;)" id="nav-summary">Resumo</button>
+  <button class="nav-btn" onclick="setView(&#39;import&#39;)" id="nav-import">📥 Importar</button>
   <button class="nav-btn" onclick="setView(&#39;config&#39;)" id="nav-config">⚙ Config</button>
 </div>
 
@@ -185,6 +208,14 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   <button id="voice-btn" class="voice-btn" onclick="toggleVoice()">
     <span id="voice-icon">🎤</span><span id="voice-lbl">Lançar por voz</span>
   </button>
+  <!-- TEXT AI INPUT -->
+  <div id="text-ai-section" style="margin-bottom:10px">
+    <div style="display:flex;gap:8px">
+      <input id="text-ai-inp" class="inp" type="text" placeholder="Ex: gastei 500 de gasolina no Mustang..." style="flex:1" onkeydown="if(event.key===&#39;Enter&#39;)processTextAI()">
+      <button onclick="processTextAI()" id="text-ai-btn" style="padding:12px 16px;border:none;border-radius:8px;background:#F5C542;color:#000;font-family:&#39;Syne&#39;,sans-serif;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap">→ IA</button>
+    </div>
+    <div id="text-ai-status" style="font-size:11px;color:#999;margin-top:5px;display:none"></div>
+  </div>
   <!-- PHOTO -->
   <input type="file" id="photo-inp" accept="image/*" style="display:none" onchange="handlePhoto(event)">
   <button class="photo-btn" id="photo-btn" onclick="document.getElementById(&#39;photo-inp&#39;).click()">
@@ -215,6 +246,22 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div class="sum-card"><div class="sum-card-lbl">Saldo</div><div id="sum-bal" class="sum-card-val"></div></div>
   </div>
   <div id="sum-cats"></div>
+</div>
+
+<!-- IMPORT VIEW -->
+<div id="view-import" class="view">
+  <div class="cfg-title">Importar fatura ou extrato</div>
+  <div style="font-size:12px;color:#888;margin-bottom:16px">Importe sua fatura, extrato ou print. A IA classifica tudo automaticamente. Você revisa antes de salvar.</div>
+  <input type="file" id="imp-pdf" accept="application/pdf" style="display:none" onchange="handleImport(event,&#39;pdf&#39;)">
+  <input type="file" id="imp-csv" accept=".csv,text/csv" style="display:none" onchange="handleImport(event,&#39;csv&#39;)">
+  <input type="file" id="imp-img" accept="image/*" style="display:none" onchange="handleImport(event,&#39;img&#39;)">
+  <div class="import-opt">
+    <button class="import-btn" onclick="document.getElementById(&#39;imp-pdf&#39;).click()"><span class="import-icon">📄</span>PDF</button>
+    <button class="import-btn" onclick="document.getElementById(&#39;imp-csv&#39;).click()"><span class="import-icon">📊</span>CSV</button>
+    <button class="import-btn" onclick="document.getElementById(&#39;imp-img&#39;).click()"><span class="import-icon">🖼️</span>Imagem</button>
+  </div>
+  <div id="imp-status" class="import-status"></div>
+  <div id="imp-results"></div>
 </div>
 
 <!-- CONFIG VIEW -->
@@ -305,6 +352,7 @@ function setView(v){
   if(v==='list')renderList();
   if(v==='summary')renderSummary();
   if(v==='config')renderConfig();
+  if(v==='import')renderImport();
 }
 
 function setType(t){
@@ -706,6 +754,230 @@ function parseTextLocal(text){
 }
 
 init();
+
+// ===== TEXT AI INPUT =====
+async function processTextAI() {
+  const inp = document.getElementById('text-ai-inp');
+  const text = inp.value.trim();
+  if (!text) return;
+
+  const btn = document.getElementById('text-ai-btn');
+  const status = document.getElementById('text-ai-status');
+  btn.textContent = '...';
+  btn.disabled = true;
+  status.style.display = 'block';
+  status.style.color = '#999';
+  status.textContent = 'Interpretando...';
+
+  // Try AI via proxy
+  try {
+    const catList = Object.entries(categories).map(([cat,subs]) => cat+': '+subs.join(', ')).join('\n');
+    const prompt = `Você é um assistente de controle financeiro. O usuário escreveu: "${text}"
+
+Categorias disponíveis:
+${catList}
+
+Extraia as informações e responda APENAS com JSON válido:
+{"valor": 500.00, "tipo": "saida", "categoria": "🐎 Mustang", "subcategoria": "Gasolina", "obs": "", "data": ""}
+
+Regras:
+- valor: número decimal. Se não mencionado use 0.
+- tipo: "saida" ou "entrada". Padrão saida.
+- categoria: exatamente uma das listadas acima.
+- subcategoria: exatamente uma das subcategorias da categoria.
+- obs: detalhes extras mencionados.
+- Mustang = 🐎 Mustang, Commander = 🚙 Commander, Mini/Mini Cooper = 🚗 Mini Cooper, Ducati = 🏍️ Ducati`;
+
+    const resp = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:prompt}]})
+    });
+    const data = await resp.json();
+    const txt = data.content?.[0]?.text || '';
+    const m = txt.match(/\{[\s\S]*?\}/);
+    if (m) {
+      const p = JSON.parse(m[0]);
+      applyParsed(p);
+      status.textContent = '✓ Alocado pela IA!';
+      status.style.color = '#2ED573';
+      inp.value = '';
+      btn.textContent = '→ IA';
+      btn.disabled = false;
+      return;
+    }
+  } catch(e) {}
+
+  // Local fallback
+  const p = parseTextLocal(text);
+  applyParsed(p);
+  status.textContent = '✓ Preenchido — confira e ajuste se precisar';
+  status.style.color = '#F5C542';
+  inp.value = '';
+  btn.textContent = '→ IA';
+  btn.disabled = false;
+}
+
+
+// ===== IMPORTAR FATURA / EXTRATO =====
+let importParsed = [];
+
+function renderImport(){
+  // keep current results if any
+}
+
+async function handleImport(event, kind){
+  const file = event.target.files[0];
+  if(!file) return;
+  const status = document.getElementById('imp-status');
+  status.classList.add('show');
+  status.style.color = '#888';
+  status.textContent = 'Lendo arquivo...';
+  document.getElementById('imp-results').innerHTML = '';
+
+  try {
+    let extractedText = '';
+
+    if(kind === 'csv'){
+      extractedText = await file.text();
+    } else if(kind === 'img'){
+      status.textContent = 'Reconhecendo texto da imagem...';
+      if(typeof Tesseract === 'undefined'){
+        await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+      }
+      const r = await Tesseract.recognize(file,'por',{logger:m=>{if(m.status==='recognizing text')status.textContent='Lendo imagem... '+Math.round(m.progress*100)+'%';}});
+      extractedText = r.data.text;
+    } else if(kind === 'pdf'){
+      status.textContent = 'Extraindo texto do PDF...';
+      if(typeof pdfjsLib === 'undefined'){
+        await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
+        pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+      let txt = '';
+      for(let i=1;i<=pdf.numPages;i++){
+        const page = await pdf.getPage(i);
+        const tc = await page.getTextContent();
+        txt += tc.items.map(it=>it.str).join(' ')+'\n';
+      }
+      extractedText = txt;
+    }
+
+    if(!extractedText.trim()){
+      status.textContent = '⚠ Não consegui extrair texto. Tente outro formato.';
+      status.style.color = '#FF9500';
+      return;
+    }
+
+    status.textContent = 'IA classificando os lançamentos...';
+
+    const catList = Object.keys(categories).join(', ');
+    const prompt = `Você é um assistente financeiro. Abaixo está o texto de uma fatura de cartão ou extrato bancário. Extraia TODOS os lançamentos (transações) e classifique cada um.
+
+Categorias disponíveis: ${catList}
+
+Texto:
+"""
+${extractedText.slice(0, 6000)}
+"""
+
+Responda APENAS com um array JSON válido, sem texto antes ou depois:
+[{"data":"2026-05-15","desc":"COCO BAMBU","valor":436.74,"tipo":"saida","categoria":"👤 Pessoal","subcategoria":"Alimentação fora"}]
+
+Regras:
+- data: formato YYYY-MM-DD. Se não houver ano, use 2026.
+- desc: nome do estabelecimento resumido
+- valor: número decimal positivo
+- tipo: "saida" para compras/débitos, "entrada" para créditos/recebimentos
+- categoria: exatamente uma das listadas. Se não tiver certeza, use "📋 Impostos & Taxas" só se for imposto, senão escolha a mais provável.
+- subcategoria: deixe vazio "" que eu preencho depois
+- Ignore linhas de saldo, pagamento de fatura, juros zerados, totais.
+- Máximo 50 lançamentos.`;
+
+    const resp = await fetch(PROXY_URL,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:prompt}]})
+    });
+    const data = await resp.json();
+    const txt = data.content?.[0]?.text || '';
+    const m = txt.match(/\[[\s\S]*\]/);
+    if(!m){
+      status.textContent = '⚠ A IA não conseguiu interpretar. Tente outro arquivo ou use lançamento manual.';
+      status.style.color = '#FF9500';
+      return;
+    }
+    importParsed = JSON.parse(m[0]);
+    // ensure each has a valid category
+    importParsed.forEach(it=>{
+      if(!categories[it.categoria]) it.categoria = Object.keys(categories)[0];
+      if(!it.subcategoria || !categories[it.categoria].includes(it.subcategoria)) it.subcategoria = categories[it.categoria][0];
+    });
+    status.textContent = `✓ ${importParsed.length} lançamentos encontrados. Revise abaixo e confirme.`;
+    status.style.color = '#2ED573';
+    renderImportResults();
+  } catch(e){
+    status.textContent = '⚠ Erro ao processar: '+(e.message||'tente novamente');
+    status.style.color = '#FF4757';
+  }
+  event.target.value = '';
+}
+
+function renderImportResults(){
+  const el = document.getElementById('imp-results');
+  if(!importParsed.length){el.innerHTML='';return;}
+  const catOpts = Object.keys(categories);
+  el.innerHTML = importParsed.map((it,idx)=>{
+    const subOpts = categories[it.categoria]||[];
+    return `<div class="imp-row">
+      <div class="imp-row-top">
+        <div class="imp-row-desc">${it.desc||'(sem descrição)'} <span class="imp-row-date">${it.data||''}</span></div>
+        <div class="imp-row-val ${it.tipo}">${it.tipo==='entrada'?'+':'-'}${fBRL(it.valor)}</div>
+      </div>
+      <select class="imp-select" onchange="changeImpCat(${idx},this.value)">
+        ${catOpts.map(c=>`<option value="${c}" ${c===it.categoria?'selected':''}>${c}</option>`).join('')}
+      </select>
+      <select class="imp-select" onchange="changeImpSub(${idx},this.value)">
+        ${subOpts.map(s=>`<option value="${s}" ${s===it.subcategoria?'selected':''}>${s}</option>`).join('')}
+      </select>
+      <span class="imp-skip" onclick="removeImpRow(${idx})">✕ remover este</span>
+    </div>`;
+  }).join('') + `
+    <div class="imp-actions">
+      <button class="imp-confirm" onclick="confirmImport()">✓ Confirmar ${importParsed.length} lançamentos</button>
+      <button class="imp-cancel" onclick="cancelImport()">Cancelar</button>
+    </div>`;
+}
+
+function changeImpCat(idx,cat){
+  importParsed[idx].categoria = cat;
+  importParsed[idx].subcategoria = categories[cat][0];
+  renderImportResults();
+}
+function changeImpSub(idx,sub){importParsed[idx].subcategoria=sub;}
+function removeImpRow(idx){importParsed.splice(idx,1);renderImportResults();if(!importParsed.length){document.getElementById('imp-status').textContent='Nenhum lançamento. Importe outro arquivo.';}}
+
+function confirmImport(){
+  for(const it of importParsed){
+    entries.unshift({id:Date.now()+Math.random(),date:it.data||new Date().toISOString().slice(0,10),type:it.tipo||'saida',category:it.categoria,subcategory:it.subcategoria,value:Math.abs(it.valor),note:it.desc||''});
+  }
+  sv('fm_entries',entries);
+  const n = importParsed.length;
+  importParsed = [];
+  document.getElementById('imp-results').innerHTML='';
+  const status = document.getElementById('imp-status');
+  status.textContent = `✓ ${n} lançamentos importados com sucesso!`;
+  status.style.color = '#2ED573';
+  updateExportBtn();
+}
+
+function cancelImport(){
+  importParsed = [];
+  document.getElementById('imp-results').innerHTML='';
+  document.getElementById('imp-status').textContent='Importação cancelada.';
+  document.getElementById('imp-status').style.color='#888';
+}
+
 </script>
 
 
