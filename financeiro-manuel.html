@@ -907,37 +907,55 @@ Regras:
     status.textContent = 'IA classificando os lançamentos...';
 
     const catList = Object.keys(categories).join(', ');
-    const prompt = `Você é um assistente financeiro. Abaixo está o texto de uma fatura de cartão ou extrato bancário. Extraia TODOS os lançamentos (transações) e classifique cada um.
+    const prompt = `Você é um assistente financeiro brasileiro. Analise este texto de fatura ou extrato bancário e extraia os lançamentos financeiros.
 
 Categorias disponíveis: ${catList}
 
-Texto:
+Texto do documento:
 """
-${extractedText.slice(0, 6000)}
+${extractedText.slice(0, 8000)}
 """
 
-Responda APENAS com um array JSON válido, sem texto antes ou depois:
+Responda APENAS com um array JSON, sem explicações, sem markdown, sem texto extra:
 [{"data":"2026-05-15","desc":"COCO BAMBU","valor":436.74,"tipo":"saida","categoria":"👤 Pessoal","subcategoria":"Alimentação fora"}]
 
-Regras:
-- data: formato YYYY-MM-DD. Se não houver ano, use 2026.
-- desc: nome do estabelecimento resumido
-- valor: número decimal positivo
-- tipo: "saida" para compras/débitos, "entrada" para créditos/recebimentos
-- categoria: exatamente uma das listadas. Se não tiver certeza, use "📋 Impostos & Taxas" só se for imposto, senão escolha a mais provável.
-- subcategoria: deixe vazio "" que eu preencho depois
-- Ignore linhas de saldo, pagamento de fatura, juros zerados, totais.
-- Máximo 50 lançamentos.`;
+Regras importantes:
+- Extraia CADA transação individualmente
+- data: formato YYYY-MM-DD (se não tiver ano use 2026)
+- desc: nome do estabelecimento ou descrição curta
+- valor: sempre número positivo
+- tipo: "saida" para compras, débitos, pagamentos; "entrada" para créditos, recebimentos
+- categoria: use EXATAMENTE uma das categorias listadas acima
+- Ignore: saldo anterior, saldo atual, pagamento de fatura, totais, juros zerados
+- Máximo 60 lançamentos`;
 
-    const resp = await fetch(PROXY_URL,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:prompt}]})
+    status.textContent = 'IA processando... aguarde';
+    const resp = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        messages: [{role: 'user', content: prompt}]
+      })
     });
+    if(!resp.ok){
+      const errTxt = await resp.text();
+      status.textContent = '⚠ Erro no servidor: ' + resp.status + ' - ' + errTxt.slice(0,100);
+      status.style.color = '#FF4757';
+      return;
+    }
     const data = await resp.json();
+    if(data.error){
+      status.textContent = '⚠ Erro da IA: ' + (data.error.message || JSON.stringify(data.error));
+      status.style.color = '#FF4757';
+      return;
+    }
     const txt = data.content?.[0]?.text || '';
+    // Try to find JSON array in response
     const m = txt.match(/\[[\s\S]*\]/);
     if(!m){
-      status.textContent = '⚠ A IA não conseguiu interpretar. Tente outro arquivo ou use lançamento manual.';
+      status.textContent = '⚠ IA não retornou dados estruturados. Texto: ' + txt.slice(0,100);
       status.style.color = '#FF9500';
       return;
     }
