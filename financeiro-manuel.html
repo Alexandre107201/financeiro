@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<!-- saved from url=(0067)https://alexandre107201.github.io/financeiro/financeiro-manuel.html -->
-<html lang="pt-BR"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#F5F5F0">
 <title>Financeiro</title>
-<link href="./Financeiro novo versao 9 _files/css2" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#F5F5F0;color:#1A1A22;font-family:'DM Mono','Courier New',monospace;min-height:100vh;padding-bottom:80px;-webkit-tap-highlight-color:transparent}
@@ -128,7 +128,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .imp-cancel{padding:14px 20px;background:#F5F5F0;border:1px solid #E0DFD9;border-radius:10px;color:#888;cursor:pointer;font-size:13px}
 .imp-skip{font-size:10px;color:#FF9500;cursor:pointer;margin-left:8px}
 </style>
-<style>.vue-notification-group{display:block;position:fixed;z-index:5000}.vue-notification-wrapper{display:block;overflow:hidden;width:100%;margin:0;padding:0}.notification-title{font-weight:600}.vue-notification-template{display:block;box-sizing:border-box;background:#fff;text-align:left}.vue-notification{display:block;box-sizing:border-box;text-align:left;font-size:12px;padding:10px;margin:0 5px 5px;color:#fff;background:#44a4fc;border-left:5px solid #187FE7}.vue-notification.warn{background:#ffb648;border-left-color:#f48a06}.vue-notification.error{background:#e54d42;border-left-color:#b82e24}.vue-notification.success{background:#68cd86;border-left-color:#42a85f}.vn-fade-enter-active,.vn-fade-leave-active,.vn-fade-move{transition:all .5s}.vn-fade-enter-from,.vn-fade-leave-to{opacity:0}</style><style>.vue-notification-group{display:block;position:fixed;z-index:5000}.vue-notification-wrapper{display:block;overflow:hidden;width:100%;margin:0;padding:0}.notification-title{font-weight:600}.vue-notification-template{display:block;box-sizing:border-box;background:#fff;text-align:left}.vue-notification{display:block;box-sizing:border-box;text-align:left;font-size:12px;padding:10px;margin:0 5px 5px;color:#fff;background:#44a4fc;border-left:5px solid #187FE7}.vue-notification.warn{background:#ffb648;border-left-color:#f48a06}.vue-notification.error{background:#e54d42;border-left-color:#b82e24}.vue-notification.success{background:#68cd86;border-left-color:#42a85f}.vn-fade-enter-active,.vn-fade-leave-active,.vn-fade-move{transition:all .5s}.vn-fade-enter-from,.vn-fade-leave-to{opacity:0}</style><style>.vue-notification-group{display:block;position:fixed;z-index:5000}.vue-notification-wrapper{display:block;overflow:hidden;width:100%;margin:0;padding:0}.notification-title{font-weight:600}.vue-notification-template{display:block;box-sizing:border-box;background:#fff;text-align:left}.vue-notification{display:block;box-sizing:border-box;text-align:left;font-size:12px;padding:10px;margin:0 5px 5px;color:#fff;background:#44a4fc;border-left:5px solid #187FE7}.vue-notification.warn{background:#ffb648;border-left-color:#f48a06}.vue-notification.error{background:#e54d42;border-left-color:#b82e24}.vue-notification.success{background:#68cd86;border-left-color:#42a85f}.vn-fade-enter-active,.vn-fade-leave-active,.vn-fade-move{transition:all .5s}.vn-fade-enter-from,.vn-fade-leave-to{opacity:0}</style><link type="text/css" rel="stylesheet" href="./Financeiro novo versao 9 _files/css2(1)"><link type="text/css" rel="stylesheet" href="./Financeiro novo versao 9 _files/css2(1)"></head>
+</head>
 <body>
 <div id="app">
 
@@ -148,7 +148,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <div id="modal-rename" class="modal-overlay" style="display:none">
   <div class="modal">
     <div id="rename-title" class="modal-title"></div>
-    <input id="rename-inp" class="rename-inp" type="text" onkeydown="if(event.key===&#39;Enter&#39;)saveRename()" wfd-id="id0">
+    <input id="rename-inp" class="rename-inp" type="text" onkeydown="if(event.key==='Enter')saveRename()">
     <div class="modal-btns">
       <button class="modal-cancel" onclick="closeRename()">Cancelar</button>
       <button class="modal-save" onclick="saveRename()">Salvar</button>
@@ -163,46 +163,46 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div class="header-title">Financeiro</div>
   </div>
   <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-    <div id="hdr-date" class="header-date">Seg, 8 Jun</div>
-    <button onclick="exportCSV()" style="padding:6px 12px;border:1px solid #F5C542;border-radius:20px;background:transparent;color:#c9a100;font-size:10px;letter-spacing:1px;cursor:pointer;font-family:&#39;DM Mono&#39;,monospace;white-space:nowrap">⬇ Backup CSV</button>
+    <div id="hdr-date" class="header-date"></div>
+    <button onclick="exportCSV()" style="padding:6px 12px;border:1px solid #F5C542;border-radius:20px;background:transparent;color:#c9a100;font-size:10px;letter-spacing:1px;cursor:pointer;font-family:'DM Mono',monospace;white-space:nowrap">⬇ Backup CSV</button>
   </div>
 </div>
 
 <!-- NAV -->
 <div class="nav">
-  <button class="nav-btn active" onclick="setView(&#39;add&#39;)" id="nav-add">+ Lançar</button>
-  <button class="nav-btn" onclick="setView(&#39;list&#39;)" id="nav-list">Histórico</button>
-  <button class="nav-btn" onclick="setView(&#39;summary&#39;)" id="nav-summary">Resumo</button>
-  <button class="nav-btn" onclick="setView(&#39;import&#39;)" id="nav-import">📥 Importar</button>
-  <button class="nav-btn" onclick="setView(&#39;config&#39;)" id="nav-config">⚙ Config</button>
+  <button class="nav-btn active" onclick="setView('add')" id="nav-add">+ Lançar</button>
+  <button class="nav-btn" onclick="setView('list')" id="nav-list">Histórico</button>
+  <button class="nav-btn" onclick="setView('summary')" id="nav-summary">Resumo</button>
+  <button class="nav-btn" onclick="setView('import')" id="nav-import">📥 Importar</button>
+  <button class="nav-btn" onclick="setView('config')" id="nav-config">⚙ Config</button>
 </div>
 
 <!-- ADD VIEW -->
 <div id="view-add" class="view active">
   <div class="type-row">
-    <button class="type-btn saida active" id="btn-saida" onclick="setType(&#39;saida&#39;)">Saída</button>
-    <button class="type-btn entrada" id="btn-entrada" onclick="setType(&#39;entrada&#39;)">Entrada</button>
+    <button class="type-btn saida active" id="btn-saida" onclick="setType('saida')">Saída</button>
+    <button class="type-btn entrada" id="btn-entrada" onclick="setType('entrada')">Entrada</button>
   </div>
   <div style="margin-bottom:16px">
     <span class="lbl">Valor (R$)</span>
-    <input id="inp-value" class="inp val-inp" type="number" inputmode="decimal" placeholder="0,00" wfd-id="id1">
+    <input id="inp-value" class="inp val-inp" type="number" inputmode="decimal" placeholder="0,00">
   </div>
   <div style="margin-bottom:16px">
     <span class="lbl">Data</span>
-    <input id="inp-date" class="inp" type="date" wfd-id="id2">
+    <input id="inp-date" class="inp" type="date">
   </div>
   <div style="margin-bottom:16px">
     <span class="lbl">Buscar categoria</span>
-    <input id="inp-cat-search" class="inp" type="text" placeholder="Ex: rancho, moto, cyrela..." oninput="renderCatChips()" style="margin-bottom:0" wfd-id="id3">
-    <div id="cat-chips" class="chips"><button class="chip active" onclick="selCatFn(&#39;🏢 Vila Fit&#39;)">🏢 Vila Fit</button><button class="chip" onclick="selCatFn(&#39;🍽️ Vila Gourmet&#39;)">🍽️ Vila Gourmet</button><button class="chip" onclick="selCatFn(&#39;🥗 Vila Sabor&#39;)">🥗 Vila Sabor</button><button class="chip" onclick="selCatFn(&#39;🔄 Operações entre empresas&#39;)">🔄 Operações entre empresas</button><button class="chip" onclick="selCatFn(&#39;🏠 Casa Cyrela&#39;)">🏠 Casa Cyrela</button><button class="chip" onclick="selCatFn(&#39;🏙️ Apto Universitá&#39;)">🏙️ Apto Universitá</button><button class="chip" onclick="selCatFn(&#39;🏗️ Imóveis Carol &amp; Manuel&#39;)">🏗️ Imóveis Carol &amp; Manuel</button><button class="chip" onclick="selCatFn(&#39;🏡 Rancho&#39;)">🏡 Rancho</button><button class="chip" onclick="selCatFn(&#39;🏘️ Casa Varanda Sul&#39;)">🏘️ Casa Varanda Sul</button><button class="chip" onclick="selCatFn(&#39;👩‍👧 Casa Mãe Norma&#39;)">👩‍👧 Casa Mãe Norma</button><button class="chip" onclick="selCatFn(&#39;🏚️ Casa Vendida&#39;)">🏚️ Casa Vendida</button><button class="chip" onclick="selCatFn(&#39;🐎 Mustang&#39;)">🐎 Mustang</button><button class="chip" onclick="selCatFn(&#39;🚙 Commander&#39;)">🚙 Commander</button><button class="chip" onclick="selCatFn(&#39;🚗 Mini Cooper&#39;)">🚗 Mini Cooper</button><button class="chip" onclick="selCatFn(&#39;🏍️ Ducati&#39;)">🏍️ Ducati</button><button class="chip" onclick="selCatFn(&#39;💊 Saúde &amp; Bem-estar&#39;)">💊 Saúde &amp; Bem-estar</button><button class="chip" onclick="selCatFn(&#39;👤 Pessoal&#39;)">👤 Pessoal</button><button class="chip" onclick="selCatFn(&#39;👨‍👩‍👧 Família&#39;)">👨‍👩‍👧 Família</button><button class="chip" onclick="selCatFn(&#39;🎓 Educação&#39;)">🎓 Educação</button><button class="chip" onclick="selCatFn(&#39;🧑‍💼 Serviços Profissionais&#39;)">🧑‍💼 Serviços Profissionais</button><button class="chip" onclick="selCatFn(&#39;📱 Assinaturas Digitais&#39;)">📱 Assinaturas Digitais</button><button class="chip" onclick="selCatFn(&#39;🛡️ Seguros &amp; Previdência&#39;)">🛡️ Seguros &amp; Previdência</button><button class="chip" onclick="selCatFn(&#39;🎰 Consórcios&#39;)">🎰 Consórcios</button><button class="chip" onclick="selCatFn(&#39;📋 Impostos &amp; Taxas&#39;)">📋 Impostos &amp; Taxas</button><button class="chip" onclick="selCatFn(&#39;✈️ Viagem &amp; Lazer&#39;)">✈️ Viagem &amp; Lazer</button><button class="chip" onclick="selCatFn(&#39;💰 Investimentos&#39;)">💰 Investimentos</button><button class="chip" onclick="selCatFn(&#39;➕ Receitas&#39;)">➕ Receitas</button></div>
+    <input id="inp-cat-search" class="inp" type="text" placeholder="Ex: rancho, moto, cyrela..." oninput="renderCatChips()" style="margin-bottom:0">
+    <div id="cat-chips" class="chips"></div>
   </div>
-  <div id="sub-section" style="margin-bottom: 16px; display: block;">
+  <div id="sub-section" style="margin-bottom:16px;display:none">
     <span class="lbl">Subcategoria</span>
-    <div id="sub-chips" class="chips"><button class="sub-chip active" onclick="selSubFn(&#39;Insumos/Fornecedores&#39;)">Insumos/Fornecedores</button><button class="sub-chip" onclick="selSubFn(&#39;Folha de Pagamento&#39;)">Folha de Pagamento</button><button class="sub-chip" onclick="selSubFn(&#39;Aluguel Espaço&#39;)">Aluguel Espaço</button><button class="sub-chip" onclick="selSubFn(&#39;Manutenção&#39;)">Manutenção</button><button class="sub-chip" onclick="selSubFn(&#39;Marketing&#39;)">Marketing</button><button class="sub-chip" onclick="selSubFn(&#39;Contabilidade&#39;)">Contabilidade</button><button class="sub-chip" onclick="selSubFn(&#39;Outros Vila Fit&#39;)">Outros Vila Fit</button></div>
+    <div id="sub-chips" class="chips"></div>
   </div>
   <div style="margin-bottom:16px">
     <span class="lbl">Obs (opcional)</span>
-    <input id="inp-note" class="inp" type="text" placeholder="Ex: NF 1234, parcela 3/12, ref maio..." wfd-id="id4">
+    <input id="inp-note" class="inp" type="text" placeholder="Ex: NF 1234, parcela 3/12, ref maio...">
   </div>
   <!-- VOICE -->
   <button id="voice-btn" class="voice-btn" onclick="toggleVoice()">
@@ -211,14 +211,14 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   <!-- TEXT AI INPUT -->
   <div id="text-ai-section" style="margin-bottom:10px">
     <div style="display:flex;gap:8px">
-      <input id="text-ai-inp" class="inp" type="text" placeholder="Ex: gastei 500 de gasolina no Mustang..." style="flex:1" onkeydown="if(event.key===&#39;Enter&#39;)processTextAI()" wfd-id="id5">
-      <button onclick="processTextAI()" id="text-ai-btn" style="padding:12px 16px;border:none;border-radius:8px;background:#F5C542;color:#000;font-family:&#39;Syne&#39;,sans-serif;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap">→ IA</button>
+      <input id="text-ai-inp" class="inp" type="text" placeholder="Ex: gastei 500 de gasolina no Mustang..." style="flex:1" onkeydown="if(event.key==='Enter')processTextAI()">
+      <button onclick="processTextAI()" id="text-ai-btn" style="padding:12px 16px;border:none;border-radius:8px;background:#F5C542;color:#000;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap">→ IA</button>
     </div>
     <div id="text-ai-status" style="font-size:11px;color:#999;margin-top:5px;display:none"></div>
   </div>
   <!-- PHOTO -->
-  <input type="file" id="photo-inp" accept="image/*" style="display:none" onchange="handlePhoto(event)" wfd-id="id6">
-  <button class="photo-btn" id="photo-btn" onclick="document.getElementById(&#39;photo-inp&#39;).click()">
+  <input type="file" id="photo-inp" accept="image/*" style="display:none" onchange="handlePhoto(event)">
+  <button class="photo-btn" id="photo-btn" onclick="document.getElementById('photo-inp').click()">
     <span id="photo-icon">📷</span><span id="photo-lbl">Enviar comprovante</span>
   </button>
   <img id="photo-preview" class="photo-preview">
@@ -252,13 +252,13 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <div id="view-import" class="view">
   <div class="cfg-title">Importar fatura ou extrato</div>
   <div style="font-size:12px;color:#888;margin-bottom:16px">Importe sua fatura, extrato ou print. A IA classifica tudo automaticamente. Você revisa antes de salvar.</div>
-  <input type="file" id="imp-pdf" accept="application/pdf" style="display:none" onchange="handleImport(event,&#39;pdf&#39;)" wfd-id="id7">
-  <input type="file" id="imp-csv" accept=".csv,text/csv" style="display:none" onchange="handleImport(event,&#39;csv&#39;)" wfd-id="id8">
-  <input type="file" id="imp-img" accept="image/*" style="display:none" onchange="handleImport(event,&#39;img&#39;)" wfd-id="id9">
+  <input type="file" id="imp-pdf" accept="application/pdf" style="display:none" onchange="handleImport(event,'pdf')">
+  <input type="file" id="imp-csv" accept=".csv,text/csv" style="display:none" onchange="handleImport(event,'csv')">
+  <input type="file" id="imp-img" accept="image/*" style="display:none" onchange="handleImport(event,'img')">
   <div class="import-opt">
-    <button class="import-btn" onclick="document.getElementById(&#39;imp-pdf&#39;).click()"><span class="import-icon">📄</span>PDF</button>
-    <button class="import-btn" onclick="document.getElementById(&#39;imp-csv&#39;).click()"><span class="import-icon">📊</span>CSV</button>
-    <button class="import-btn" onclick="document.getElementById(&#39;imp-img&#39;).click()"><span class="import-icon">🖼️</span>Imagem</button>
+    <button class="import-btn" onclick="document.getElementById('imp-pdf').click()"><span class="import-icon">📄</span>PDF</button>
+    <button class="import-btn" onclick="document.getElementById('imp-csv').click()"><span class="import-icon">📊</span>CSV</button>
+    <button class="import-btn" onclick="document.getElementById('imp-img').click()"><span class="import-icon">🖼️</span>Imagem</button>
   </div>
   <div id="imp-status" class="import-status"></div>
   <div id="imp-results"></div>
@@ -266,16 +266,16 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 
 <!-- CONFIG VIEW -->
 <div id="view-config" class="view">
-  <div class="cfg-title">Categorias &amp; Subcategorias</div>
+  <div class="cfg-title">Categorias & Subcategorias</div>
   <div class="cfg-backup">
     <span class="lbl">Backup dos dados</span>
     <div class="cfg-backup-desc">Exporte todos os lançamentos como CSV. Guarde no Google Drive.</div>
-    <button class="export-btn" id="export-btn" onclick="exportCSV()">⬇ Exportar CSV (0 lançamentos)</button>
+    <button class="export-btn" id="export-btn" onclick="exportCSV()">⬇ Exportar CSV</button>
   </div>
   <div class="new-cat-card">
     <span class="lbl">Nova Categoria</span>
     <div class="new-cat-row">
-      <input id="new-cat-inp" class="inp" type="text" placeholder="Ex: 🌾 Fazenda" onkeydown="if(event.key===&#39;Enter&#39;)addCat()" wfd-id="id10">
+      <input id="new-cat-inp" class="inp" type="text" placeholder="Ex: 🌾 Fazenda" onkeydown="if(event.key==='Enter')addCat()">
       <button class="add-btn" onclick="addCat()">+</button>
     </div>
   </div>
@@ -979,11 +979,5 @@ function cancelImport(){
 }
 
 </script>
-
-
-
-<div id="ihn7es7wp3" style="display: block;"><template shadowrootmode="closed"><div id="i2vvt5f4k0"><style type="text/css">
-  @import 'chrome-extension://gidejehfgombmkfflghejpncblgfkagj/app.css';
-</style>
-<div id="cuponomia" data-v-app=""><div></div></div>
-</div></template></div></body></html>
+</body>
+</html>
