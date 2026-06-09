@@ -620,7 +620,7 @@ Regras:
     const resp=await fetch(PROXY_URL,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:prompt}]})
+      body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:300,messages:[{role:'user',content:prompt}]})
     });
     const data=await resp.json();
     const txt=data.content?.[0]?.text||'';
@@ -668,7 +668,7 @@ async function handlePhoto(event){
     try {
       const catList=Object.entries(categories).map(([cat,subs])=>cat+': '+subs.join(', ')).join('\n');
       const prompt=`Analise este texto extraído de um comprovante e classifique financeiramente.\n\nTexto: "${text.slice(0,500)}"\n\nCategorias:\n${catList}\n\nResponda APENAS com JSON: {"valor": 0.00, "tipo": "saida", "categoria": "...", "subcategoria": "...", "obs": "...", "data": ""}`;
-      const resp=await fetch(PROXY_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:prompt}]})});
+      const resp=await fetch(PROXY_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:300,messages:[{role:'user',content:prompt}]})});
       const aiData=await resp.json();
       const aiTxt=aiData.content?.[0]?.text||'';
       const aiM=aiTxt.match(/\{[\s\S]*?\}/);
@@ -791,7 +791,7 @@ Regras:
     const resp = await fetch(PROXY_URL, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:prompt}]})
+      body: JSON.stringify({model:'claude-sonnet-4-5',max_tokens:300,messages:[{role:'user',content:prompt}]})
     });
     const data = await resp.json();
     const txt = data.content?.[0]?.text || '';
@@ -871,7 +871,7 @@ Regras:
       const resp = await fetch(PROXY_URL, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
-          model:'claude-sonnet-4-20250514', max_tokens:4000,
+          model:'claude-sonnet-4-5', max_tokens:4000,
           messages:[{role:'user', content:[
             {type:'document', source:{type:'base64', media_type:'application/pdf', data:base64}},
             {type:'text', text:prompt}
@@ -934,7 +934,7 @@ Regras importantes:
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         max_tokens: 4000,
         messages: [{role: 'user', content: prompt}]
       })
