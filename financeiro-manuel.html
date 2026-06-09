@@ -848,20 +848,54 @@ async function handleImport(event, kind){
       const r = await Tesseract.recognize(file,'por',{logger:m=>{if(m.status==='recognizing text')status.textContent='Lendo imagem... '+Math.round(m.progress*100)+'%';}});
       extractedText = r.data.text;
     } else if(kind === 'pdf'){
-      status.textContent = 'Extraindo texto do PDF...';
-      if(typeof pdfjsLib === 'undefined'){
-        await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});
-        pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      status.textContent = 'Enviando PDF para a IA...';
+      // Send PDF directly as base64 to Claude
+      const base64 = await new Promise((resolve) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result.split(',')[1]);
+        r.readAsDataURL(file);
+      });
+      const catList = Object.keys(categories).join(', ');
+      const prompt = `Você é um assistente financeiro. Analise esta fatura/extrato bancário em PDF.
+
+Categorias disponíveis: ${catList}
+
+Extraia TODOS os lançamentos e responda APENAS com array JSON:
+[{"data":"2026-05-15","desc":"COCO BAMBU","valor":436.74,"tipo":"saida","categoria":"👤 Pessoal","subcategoria":""}]
+
+Regras:
+- Ignore saldos, pagamentos de fatura, juros zerados, totais
+- tipo: saida para compras/débitos, entrada para créditos
+- categoria: exatamente uma das listadas
+- Máximo 60 lançamentos`;
+      const resp = await fetch(PROXY_URL, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          model:'claude-sonnet-4-20250514', max_tokens:4000,
+          messages:[{role:'user', content:[
+            {type:'document', source:{type:'base64', media_type:'application/pdf', data:base64}},
+            {type:'text', text:prompt}
+          ]}]
+        })
+      });
+      const aiData = await resp.json();
+      const aiTxt = aiData.content?.[0]?.text || '';
+      const aiM = aiTxt.match(/\[[\s\S]*\]/);
+      if(aiM){
+        importParsed = JSON.parse(aiM[0]);
+        importParsed.forEach(it=>{
+          if(!categories[it.categoria]) it.categoria = Object.keys(categories)[0];
+          if(!it.subcategoria || !categories[it.categoria].includes(it.subcategoria)) it.subcategoria = categories[it.categoria][0];
+        });
+        status.textContent = `✓ ${importParsed.length} lançamentos encontrados. Revise abaixo e confirme.`;
+        status.style.color = '#2ED573';
+        renderImportResults();
+      } else {
+        status.textContent = '⚠ Não consegui interpretar o PDF. Tente uma imagem (print) da fatura.';
+        status.style.color = '#FF9500';
       }
-      const buf = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({data:buf}).promise;
-      let txt = '';
-      for(let i=1;i<=pdf.numPages;i++){
-        const page = await pdf.getPage(i);
-        const tc = await page.getTextContent();
-        txt += tc.items.map(it=>it.str).join(' ')+'\n';
-      }
-      extractedText = txt;
+      event.target.value = '';
+      return;
     }
 
     if(!extractedText.trim()){
