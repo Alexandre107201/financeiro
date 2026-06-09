@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#FAFAF8">
-<title>Financeiro v17</title>
+<title>Financeiro v18</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -364,10 +364,12 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   <input type="file" id="imp-img" accept="image/*" style="display:none" onchange="handleImport(event,'img')">
   <input type="file" id="imp-csv" accept=".csv,text/csv" style="display:none" onchange="handleImport(event,'csv')">
   <input type="file" id="imp-pdf" accept="application/pdf" style="display:none" onchange="handleImport(event,'pdf')">
+  <input type="file" id="imp-json" accept="application/json,.json" style="display:none" onchange="handleImportJSON(event)">
   <div class="imp-opts">
     <button class="imp-btn" onclick="document.getElementById('imp-img').click()"><span class="imp-icon">🖼️</span>Imagem</button>
     <button class="imp-btn" onclick="document.getElementById('imp-csv').click()"><span class="imp-icon">📊</span>CSV</button>
     <button class="imp-btn" onclick="document.getElementById('imp-pdf').click()"><span class="imp-icon">📄</span>PDF</button>
+    <button class="imp-btn" onclick="document.getElementById('imp-json').click()"><span class="imp-icon">📥</span>JSON</button>
   </div>
   <div id="imp-st" class="imp-st"></div>
   <div id="imp-results"></div>
@@ -378,8 +380,9 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   <div class="cfg-title">Categorias & Subcategorias</div>
   <div class="cfg-backup">
     <span class="lbl">Backup dos dados</span>
-    <div class="cfg-backup-desc">Exporte seus lançamentos como CSV. Guarde no Google Drive.</div>
+    <div class="cfg-backup-desc">Exporte seus lançamentos como CSV ou JSON completo. Guarde no Google Drive.</div>
     <button class="exp-btn" id="exp-btn" onclick="exportCSV()">⬇ Exportar CSV</button>
+    <button class="exp-btn" style="margin-top:8px;background:#6C5CE7;color:#fff;border-color:#6C5CE7" onclick="exportJSON()">⬇ Exportar JSON (backup completo)</button>
   </div>
   <div class="new-cat-card">
     <span class="lbl">Nova Categoria</span>
@@ -1113,6 +1116,57 @@ function exportCSV(){
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download=`financeiro_${today()}.csv`;a.click();URL.revokeObjectURL(url);
+}
+
+function exportJSON(){
+  const backup={version:18,exportedAt:new Date().toISOString(),entries,cats};
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`financeiro_backup_${today()}.json`;a.click();URL.revokeObjectURL(url);
+}
+
+async function handleImportJSON(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  const st=document.getElementById('imp-st');
+  st.textContent='Lendo arquivo JSON...';st.style.color='#b8920a';
+  try{
+    const text=await file.text();
+    const data=JSON.parse(text);
+    // Suporta dois formatos: backup completo {entries:[...]} ou array direto [{data,desc,valor,...}]
+    let parsed=[];
+    if(Array.isArray(data)){
+      // Array direto gerado por Claude no chat
+      parsed=data.map(it=>({
+        id:Date.now()+Math.random(),
+        date:it.data||it.date||today(),
+        type:it.tipo||it.type||'saida',
+        category:it.categoria||it.category||Object.keys(cats)[0],
+        subcategory:it.subcategoria||it.subcategory||'',
+        value:Math.abs(parseFloat(it.valor||it.value||0)),
+        note:it.desc||it.note||''
+      }));
+    } else if(data.entries&&Array.isArray(data.entries)){
+      // Backup completo do app
+      parsed=data.entries;
+    } else {
+      throw new Error('Formato de JSON não reconhecido');
+    }
+    // Corrige categorias inválidas
+    parsed.forEach(it=>{
+      if(!cats[it.category])it.category=Object.keys(cats)[0];
+      if(!it.subcategory||!cats[it.category]||!cats[it.category].includes(it.subcategory))
+        it.subcategory=cats[it.category]?.[0]||'';
+    });
+    importParsed=parsed;
+    st.textContent=`✓ ${parsed.length} lançamentos encontrados. Revise e confirme abaixo.`;
+    st.style.color='#00B894';
+    renderImportResults();
+  }catch(e){
+    st.textContent='⚠ Erro ao ler JSON: '+(e.message||'arquivo inválido');
+    st.style.color='#FF4757';
+  }
+  event.target.value='';
 }
 function updateExpBtn(){const b=document.getElementById('exp-btn');if(b)b.textContent=`⬇ Exportar CSV (${entries.length} lançamentos)`;}
 
