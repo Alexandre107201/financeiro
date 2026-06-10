@@ -371,6 +371,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <!-- LIST VIEW -->
 <div id="view-list" class="view">
   <div id="lm" class="mf"></div>
+  <input id="list-search" class="inp" type="text" placeholder="🔍 Buscar por descrição, categoria..." oninput="renderList()" style="margin-bottom:12px">
   <div id="list-entries"></div>
 </div>
 
@@ -625,14 +626,20 @@ function setFM(m){fMonth=m;if(curView==='list')renderList();if(curView==='summar
 
 function renderList(){
   renderMF('lm');
-  const me=entries.filter(e=>gMK(e.date)===fMonth);
+  const q=(document.getElementById('list-search')?.value||'').toLowerCase();
+  let me=entries.filter(e=>gMK(e.date)===fMonth);
+  if(q) me=me.filter(e=>(e.note||'').toLowerCase().includes(q)||(e.category||'').toLowerCase().includes(q)||(e.subcategory||'').toLowerCase().includes(q));
   const el=document.getElementById('list-entries');
-  if(!me.length){el.innerHTML='<div class="empty">Nenhum lançamento neste mês</div>';return;}
-  el.innerHTML=me.map(e=>`
+  if(!me.length){el.innerHTML='<div class="empty">'+(q?'Nenhum resultado para "'+q+'"':'Nenhum lançamento neste mês')+'</div>';return;}
+  // sort by date desc
+  me=[...me].sort((a,b)=>b.date.localeCompare(a.date));
+  el.innerHTML=me.map(e=>{
+    const[y,mo,dy]=e.date.split('-');
+    return `
     <div class="ec ${e.type}">
       <div style="flex:1">
         <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:3px">
-          <span class="ec-date">${e.date.slice(5).replace('-','/')}</span>
+          <span class="ec-date">${dy}/${mo}</span>
           <span class="ec-sub">${e.subcategory}</span>
         </div>
         <div class="ec-cat">${e.category}</div>
@@ -643,7 +650,8 @@ function renderList(){
         <button class="edit-btn" onclick="openEdit(${e.id})">editar</button>
         <button class="del-btn" onclick="openDel('entry',${e.id})">excluir</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderSummary(){
@@ -656,24 +664,71 @@ function renderSummary(){
   document.getElementById('so').textContent=fBRL(tOut);
   const bEl=document.getElementById('sb');
   bEl.textContent=fBRL(Math.abs(bal));bEl.style.color=bal>=0?'#00B894':'#FF4757';
+
+  // Build structure: cat → sub → entries[]
   const byCat={};
   for(const e of me){
-    if(!byCat[e.category])byCat[e.category]={total:0,subs:{},count:0};
+    if(!byCat[e.category])byCat[e.category]={total:0,subs:{},count:0,entries:[]};
     byCat[e.category].total+=e.type==='saida'?-e.value:e.value;
     byCat[e.category].count++;
-    if(!byCat[e.category].subs[e.subcategory])byCat[e.category].subs[e.subcategory]=0;
-    byCat[e.category].subs[e.subcategory]+=e.type==='saida'?-e.value:e.value;
+    byCat[e.category].entries.push(e);
+    const sk=e.subcategory||'(sem subcategoria)';
+    if(!byCat[e.category].subs[sk])byCat[e.category].subs[sk]={total:0,entries:[]};
+    byCat[e.category].subs[sk].total+=e.type==='saida'?-e.value:e.value;
+    byCat[e.category].subs[sk].entries.push(e);
   }
+
   const el=document.getElementById('sum-cats');
   if(!Object.keys(byCat).length){el.innerHTML='<div class="empty">Nenhum lançamento neste mês</div>';return;}
+
   el.innerHTML=Object.entries(byCat).sort((a,b)=>a[1].total-b[1].total).map(([cat,d])=>{
-    const open=expSum===cat;
-    const subs=open?Object.entries(d.subs).map(([s,v])=>`<div class="sub-row"><span style="color:#888">${s}</span><span style="font-family:'Syne',sans-serif;font-weight:700;color:${v>=0?'#00B894':'#FF4757'}">${v>=0?'+':''}${fBRL(v)}</span></div>`).join(''):'';
-    return `<div class="cr-wrap"><div class="cr ${open?'open':'closed'}" onclick="toggleSum('${cat.replace(/'/g,"\\'")}')"><div><div style="font-size:13px;font-weight:500">${cat}</div><div style="font-size:10px;color:#bbb;margin-top:2px">${d.count} lançamentos</div></div><div style="font-family:'Syne',sans-serif;font-weight:800;font-size:15px;color:${d.total>=0?'#00B894':'#FF4757'}">${d.total>=0?'+':''}${fBRL(d.total)}</div></div>${open?`<div class="cr-detail">${subs}</div>`:''}</div>`;
+    const catOpen=expSum===cat||expSum?.startsWith(cat+'||');
+    const subsHtml=catOpen?Object.entries(d.subs).map(([sub,sd])=>{
+      const subKey=cat+'||'+sub;
+      const subOpen=expSum===subKey;
+      const entriesHtml=subOpen?sd.entries.sort((a,b)=>b.date.localeCompare(a.date)).map(e=>{
+        const[y,mo,dy]=e.date.split('-');
+        return `<div style="display:flex;justify-content:space-between;padding:5px 12px 5px 20px;border-bottom:1px solid #F0EFE9;font-size:11px">
+          <span style="color:#999">${dy}/${mo} · ${e.note||'—'}</span>
+          <span style="font-family:'Syne',sans-serif;font-weight:700;color:${e.type==='entrada'?'#00B894':'#FF4757'};flex-shrink:0;margin-left:8px">${e.type==='entrada'?'+':'-'}${fBRL(e.value)}</span>
+        </div>`;
+      }).join(''):'';
+      return `<div style="border-bottom:1px solid #E8E6E0">
+        <div class="sub-row" style="cursor:pointer;padding:7px 15px" onclick="toggleSum('${subKey.replace(/'/g,"\\'")}')">
+          <span style="color:#666;font-size:12px">${subOpen?'▾':'▸'} ${sub}</span>
+          <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:12px;color:${sd.total>=0?'#00B894':'#FF4757'}">${sd.total>=0?'+':''}${fBRL(sd.total)}</span>
+        </div>
+        ${subOpen?`<div style="background:#FAFAF8">${entriesHtml}</div>`:''}
+      </div>`;
+    }).join(''):'';
+
+    return `<div class="cr-wrap">
+      <div class="cr ${catOpen?'open':'closed'}" onclick="toggleSum('${cat.replace(/'/g,"\\'")}')">
+        <div>
+          <div style="font-size:13px;font-weight:500">${cat}</div>
+          <div style="font-size:10px;color:#bbb;margin-top:2px">${d.count} lançamentos</div>
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:15px;color:${d.total>=0?'#00B894':'#FF4757'}">${d.total>=0?'+':''}${fBRL(d.total)}</div>
+      </div>
+      ${catOpen?`<div class="cr-detail" style="padding:0">${subsHtml}</div>`:''}
+    </div>`;
   }).join('');
 }
 
-function toggleSum(cat){expSum=expSum===cat?null:cat;renderSummary();}
+function toggleSum(key){
+  // If clicking cat that's already open and no sub is open → close
+  // If clicking a sub → open sub (keep cat open)
+  // If clicking cat while sub open → close sub, keep cat open
+  if(!key.includes('||')){
+    // cat click
+    const catOpen=expSum===key||expSum?.startsWith(key+'||');
+    expSum=catOpen&&expSum===key?null:key;
+  } else {
+    // sub click
+    expSum=expSum===key?key.split('||')[0]:key;
+  }
+  renderSummary();
+}
 
 // ===== ANALYTICS =====
 function renderAnalytics(){
