@@ -6,7 +6,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#FAFAF8">
-<title>Financeiro v21</title>
+<title>Financeiro v23</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -299,6 +299,8 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     <div class="edit-row">
       <span class="lbl">Obs</span>
       <input id="e-note" class="inp" type="text" placeholder="Observação opcional">
+      <span class="lbl" style="margin-top:8px;display:block">Origem</span>
+      <select id="e-acc" class="inp" style="width:100%"></select>
     </div>
     <div class="modal-btns">
       <button class="m-cancel" onclick="closeMEdit()">Cancelar</button>
@@ -369,6 +371,8 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   <div style="margin-bottom:14px">
     <span class="lbl">Obs (opcional)</span>
     <input id="inote" class="inp" type="text" placeholder="Ex: NF 1234, parcela 3/12, ref maio...">
+    <span class="lbl" style="margin-top:10px;display:block">Origem (conta/cartão)</span>
+    <select id="i-acc" class="inp" style="width:100%"></select>
   </div>
   <div class="text-row">
     <input id="text-ai" class="inp" type="text" placeholder="Descreva em texto: gastei 500 gasolina Mustang..." style="flex:1" onkeydown="if(event.key==='Enter')runTextAI()">
@@ -423,9 +427,13 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <!-- IMPORT VIEW -->
 <div id="view-import" class="view">
   <div class="cfg-title">Importar fatura ou extrato</div>
-  <p style="font-size:12px;color:#888;margin-bottom:14px">Importe print ou CSV da sua fatura. A IA classifica automaticamente. Você revisa antes de salvar.</p>
-  <input type="file" id="imp-img" accept="image/*" style="display:none" onchange="handleImport(event,'img')">
-  <input type="file" id="imp-csv" accept=".csv,text/csv" style="display:none" onchange="handleImport(event,'csv')">
+  <p style="font-size:12px;color:#888;margin-bottom:10px">Importe prints (várias de uma vez), CSV ou PDF da fatura/extrato. A IA classifica, você revisa antes de salvar.</p>
+  <div style="margin-bottom:14px">
+    <span class="lbl">Origem deste arquivo</span>
+    <select id="imp-acc" class="inp" style="width:100%"></select>
+  </div>
+  <input type="file" id="imp-img" accept="image/*" multiple style="display:none" onchange="handleImport(event,'img')">
+  <input type="file" id="imp-csv" accept=".csv,text/csv" multiple style="display:none" onchange="handleImport(event,'csv')">
   <input type="file" id="imp-pdf" accept="application/pdf" style="display:none" onchange="handleImport(event,'pdf')">
   <input type="file" id="imp-json" accept="application/json,.json" style="display:none" onchange="handleImportJSON(event)">
   <div class="imp-opts">
@@ -455,10 +463,25 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     </div>
   </div>
   <div id="cfg-cats"></div>
+  <div class="cfg-title" style="margin-top:24px">Contas & Cartões</div>
+  <div class="cfg-backup">
+    <div class="cfg-backup-desc">Origens dos lançamentos. Para contas correntes, informe o saldo inicial (saldo real na data do primeiro extrato importado) para o app calcular o saldo atual.</div>
+    <div id="cfg-accs"></div>
+    <div class="new-cat-row" style="margin-top:8px">
+      <input id="nai" class="inp" type="text" placeholder="Nova conta/cartão..." style="flex:2">
+      <select id="nak" class="inp"><option value="conta">Conta</option><option value="cartao">Cartão</option></select>
+      <button class="add-btn" onclick="addAcc()">+</button>
+    </div>
+  </div>
   <div class="cfg-title" style="margin-top:24px">Regras de classificação</div>
   <div class="cfg-backup">
     <div class="cfg-backup-desc">Criadas automaticamente quando você corrige uma categoria na importação ou edição. Têm prioridade sobre a IA nas próximas importações.</div>
     <div id="cfg-rules"></div>
+  </div>
+  <div class="cfg-title" style="margin-top:24px;color:#FF4757">Zona de risco</div>
+  <div class="cfg-backup" style="border-color:#FFD6DB">
+    <div class="cfg-backup-desc">Apaga todos os lançamentos para reimportar do zero. Categorias, regras, orçamentos e contas são preservados. <b>Exporte o JSON antes.</b></div>
+    <button class="exp-btn" style="background:#fff;color:#FF4757;border-color:#FF4757" onclick="wipeEntries()">🗑 Zerar todos os lançamentos</button>
   </div>
 </div>
 
@@ -586,8 +609,50 @@ function budgetStatus(cat,spent){
 }
 function spentOutByCat(monthKey){
   const r={};
-  entries.filter(e=>gMK(e.date)===monthKey&&e.type==='saida').forEach(e=>{r[e.category]=(r[e.category]||0)+e.value;});
+  entries.filter(e=>gMK(e.date)===monthKey&&e.type==='saida'&&!isTransfer(e)).forEach(e=>{r[e.category]=(r[e.category]||0)+e.value;});
   return r;
+}
+
+// ===== CONTAS & CARTÕES (origem dos lançamentos) =====
+let accs=[];
+const ACC_DEFAULTS=[
+  {id:'bb-cc',name:'Conta BB (22741-2)',kind:'conta',saldoInicial:0},
+  {id:'sant-cc',name:'Conta Santander (01000934-9)',kind:'conta',saldoInicial:0},
+  {id:'bb-altus',name:'BB Altus Visa •3411',kind:'cartao',saldoInicial:0},
+  {id:'bb-elo',name:'Ourocard Elo •2150',kind:'cartao',saldoInicial:0},
+  {id:'sant-2874',name:'Santander Master •2874',kind:'cartao',saldoInicial:0},
+  {id:'sant-4868',name:'Santander Master •4868',kind:'cartao',saldoInicial:0}
+];
+function isTransfer(e){return String(e.category||'').startsWith('🔁');}
+function accName(id){const a=accs.find(a=>a.id===id);return a?a.name:'Sem origem';}
+function renderAccSelects(){
+  const opts='<option value="">— sem origem —</option>'+accs.map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
+  const imp=document.getElementById('imp-acc');if(imp){const cur=imp.value;imp.innerHTML=opts;imp.value=cur||lsv('fm_last_acc','');}
+  const lan=document.getElementById('i-acc');if(lan){const cur=lan.value;lan.innerHTML=opts;lan.value=cur;}
+}
+function addAcc(){
+  const n=document.getElementById('nai').value.trim();
+  const k=document.getElementById('nak').value;
+  if(!n)return;
+  accs.push({id:'acc'+Date.now(),name:n,kind:k,saldoInicial:0});
+  ssv('fm_accs',accs);document.getElementById('nai').value='';
+  renderConfig();renderAccSelects();
+}
+function delAcc(id){
+  accs=accs.filter(a=>a.id!==id);ssv('fm_accs',accs);
+  renderConfig();renderAccSelects();
+}
+function setAccSaldo(id,val){
+  const a=accs.find(a=>a.id===id);if(!a)return;
+  a.saldoInicial=parseFloat(String(val).replace(',','.'))||0;
+  ssv('fm_accs',accs);
+}
+function wipeEntries(){
+  if(!confirm('Apagar TODOS os '+entries.length+' lançamentos? Categorias, regras, orçamentos e contas serão mantidos.'))return;
+  if(!confirm('Tem certeza? Exporte o JSON antes se ainda não fez. Esta ação não pode ser desfeita.'))return;
+  entries=[];ssv('fm_e',entries);
+  renderConfig();updateExpBtn();
+  alert('Lançamentos apagados. Importe seus arquivos novamente na aba Importar, marcando a origem de cada um.');
 }
 function gMK(d){return d.slice(0,7);}
 function today(){return new Date().toISOString().slice(0,10);}
@@ -597,7 +662,10 @@ function init(){
   cats=lsv('fm_c',null);
   rules=lsv('fm_rules',[]);
   budgets=lsv('fm_budget',{});
+  accs=lsv('fm_accs',null);
+  if(!accs||!accs.length)accs=JSON.parse(JSON.stringify(ACC_DEFAULTS));
   if(!cats||Object.keys(cats).length===0) cats=JSON.parse(JSON.stringify(DEFAULTS));
+  if(!cats['🔁 Transferências']){cats['🔁 Transferências']=['Pagamento de fatura','Entre contas próprias','Entre empresas (CNPJs)'];ssv('fm_c',cats);}
   document.getElementById('id').value=today();
   fMonth=today().slice(0,7);
   const days=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
@@ -607,6 +675,7 @@ function init(){
   selSub=cats[selCat]?.[0]||'';
   renderCats();
   renderSubs();
+  renderAccSelects();
   updateExpBtn();
 }
 
@@ -687,7 +756,7 @@ function selSubFn(sub){selSub=sub;renderSubs();}
 function addEntry(){
   const raw=document.getElementById('iv').value.replace(',','.');
   if(!raw||isNaN(Number(raw)))return;
-  const e={id:Date.now(),date:document.getElementById('id').value,type:curType,category:selCat,subcategory:selSub,value:parseFloat(raw),note:document.getElementById('inote').value};
+  const e={id:Date.now(),date:document.getElementById('id').value,type:curType,category:selCat,subcategory:selSub,value:parseFloat(raw),note:document.getElementById('inote').value,acc:document.getElementById('i-acc')?.value||''};
   entries.unshift(e);ssv('fm_e',entries);
   document.getElementById('iv').value='';
   document.getElementById('inote').value='';
@@ -748,8 +817,8 @@ function renderList(){
 function renderSummary(){
   renderMF('sm');
   const me=entries.filter(e=>gMK(e.date)===fMonth);
-  const tIn=me.filter(e=>e.type==='entrada').reduce((s,e)=>s+e.value,0);
-  const tOut=me.filter(e=>e.type==='saida').reduce((s,e)=>s+e.value,0);
+  const tIn=me.filter(e=>e.type==='entrada'&&!isTransfer(e)).reduce((s,e)=>s+e.value,0);
+  const tOut=me.filter(e=>e.type==='saida'&&!isTransfer(e)).reduce((s,e)=>s+e.value,0);
   const bal=tIn-tOut;
   document.getElementById('si').textContent=fBRL(tIn);
   document.getElementById('so').textContent=fBRL(tOut);
@@ -770,9 +839,31 @@ function renderSummary(){
   }
 
   const el=document.getElementById('sum-cats');
-  if(!Object.keys(byCat).length){el.innerHTML='<div class="empty">Nenhum lançamento neste mês</div>';return;}
 
-  el.innerHTML=Object.entries(byCat).sort((a,b)=>a[1].total-b[1].total).map(([cat,d])=>{
+  // ===== CONTAS & CARTÕES =====
+  let accHtml='';
+  if(accs.length&&entries.some(e=>e.acc)){
+    const rows=accs.map(a=>{
+      const list=entries.filter(e=>e.acc===a.id);
+      if(!list.length&&!a.saldoInicial)return '';
+      if(a.kind==='conta'){
+        const ins=list.filter(e=>e.type==='entrada').reduce((s,e)=>s+e.value,0);
+        const outs=list.filter(e=>e.type==='saida').reduce((s,e)=>s+e.value,0);
+        const saldo=(a.saldoInicial||0)+ins-outs;
+        return `<div class="fc-item"><div class="fc-item-desc">🏦 ${a.name}</div><div class="fc-item-parc">${list.length} mov.</div><div class="fc-item-val" style="color:${saldo>=0?'#00B894':'#FF4757'}">${fBRL(saldo)}</div></div>`;
+      }else{
+        const gastoMes=list.filter(e=>gMK(e.date)===fMonth&&e.type==='saida').reduce((s,e)=>s+e.value,0);
+        if(!gastoMes&&!list.length)return '';
+        return `<div class="fc-item"><div class="fc-item-desc">💳 ${a.name}</div><div class="fc-item-parc">fatura do mês filtrado</div><div class="fc-item-val">${fBRL(gastoMes)}</div></div>`;
+      }
+    }).filter(Boolean).join('');
+    const semOrigem=entries.filter(e=>!e.acc).length;
+    if(rows)accHtml=`<div class="chart-section" style="margin-bottom:12px"><div class="chart-section-title">Contas & Cartões</div>${rows}${semOrigem?`<div style="font-size:10px;color:#ccc;padding-top:6px">${semOrigem} lançamentos sem origem (fora dos saldos acima). Saldo de conta = saldo inicial (Config) + movimentações importadas do extrato.</div>`:`<div style="font-size:10px;color:#ccc;padding-top:6px">Saldo de conta = saldo inicial (Config) + movimentações importadas do extrato.</div>`}</div>`;
+  }
+
+  if(!Object.keys(byCat).length){el.innerHTML=accHtml+'<div class="empty">Nenhum lançamento neste mês</div>';return;}
+
+  el.innerHTML=accHtml+Object.entries(byCat).sort((a,b)=>a[1].total-b[1].total).map(([cat,d])=>{
     const catOpen=expSum===cat||expSum?.startsWith(cat+'||');
     const subsHtml=catOpen?Object.entries(d.subs).map(([sub,sd])=>{
       const subKey=cat+'||'+sub;
@@ -936,7 +1027,8 @@ function destroyDashCharts(){dashCharts.forEach(c=>{try{c.destroy();}catch(e){}}
 function renderDashboard(){
   destroyDashCharts();
   const el=document.getElementById('dash-content');
-  const allMonths=[...new Set(entries.map(e=>gMK(e.date)))].sort();
+  const dEntries=entries.filter(e=>!isTransfer(e)); // transferências fora dos indicadores de gasto
+  const allMonths=[...new Set(dEntries.map(e=>gMK(e.date)))].sort();
   if(!allMonths.length){el.innerHTML='<div class="empty">Nenhum lançamento ainda.<br>Importe suas faturas para ver o dashboard.</div>';return;}
 
   // KPIs últimos 30 dias vs 30 anteriores
@@ -944,8 +1036,8 @@ function renderDashboard(){
   const d30=new Date(today);d30.setDate(d30.getDate()-30);
   const d60=new Date(today);d60.setDate(d60.getDate()-60);
   const fmt=d=>d.toISOString().slice(0,10);
-  const last30=entries.filter(e=>e.date>=fmt(d30));
-  const prev30=entries.filter(e=>e.date>=fmt(d60)&&e.date<fmt(d30));
+  const last30=dEntries.filter(e=>e.date>=fmt(d30));
+  const prev30=dEntries.filter(e=>e.date>=fmt(d60)&&e.date<fmt(d30));
   const sumOut=arr=>arr.filter(e=>e.type==='saida').reduce((s,e)=>s+e.value,0);
   const sumIn=arr=>arr.filter(e=>e.type==='entrada').reduce((s,e)=>s+e.value,0);
   const out30=sumOut(last30),in30=sumIn(last30),outP=sumOut(prev30),inP=sumIn(prev30);
@@ -954,8 +1046,8 @@ function renderDashboard(){
 
   // Monthly totals for chart
   const mLabels=allMonths.slice(-6).map(m=>{const[y,mo]=m.split('-');return MONTHS[parseInt(mo)-1]+'/'+y.slice(2);});
-  const mOut=allMonths.slice(-6).map(m=>entries.filter(e=>gMK(e.date)===m&&e.type==='saida').reduce((s,e)=>s+e.value,0));
-  const mIn=allMonths.slice(-6).map(m=>entries.filter(e=>gMK(e.date)===m&&e.type==='entrada').reduce((s,e)=>s+e.value,0));
+  const mOut=allMonths.slice(-6).map(m=>dEntries.filter(e=>gMK(e.date)===m&&e.type==='saida').reduce((s,e)=>s+e.value,0));
+  const mIn=allMonths.slice(-6).map(m=>dEntries.filter(e=>gMK(e.date)===m&&e.type==='entrada').reduce((s,e)=>s+e.value,0));
 
   // Category breakdown current month
   const curM=allMonths[allMonths.length-1];
@@ -963,7 +1055,7 @@ function renderDashboard(){
   const nowMK=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0');
   const spentNow=spentOutByCat(nowMK);
   const budAlerts=Object.keys(budgets).map(c=>budgetStatus(c,spentNow[c]||0)?{cat:c,...budgetStatus(c,spentNow[c]||0)}:null).filter(b=>b&&b.pct>=80).sort((a,b)=>b.pct-a.pct);
-  const curEntries=entries.filter(e=>gMK(e.date)===curM&&e.type==='saida');
+  const curEntries=dEntries.filter(e=>gMK(e.date)===curM&&e.type==='saida');
   const byCat={};
   curEntries.forEach(e=>{byCat[e.category]=(byCat[e.category]||0)+e.value;});
   const topCats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,8);
@@ -1120,7 +1212,7 @@ function detectRecurrences(){
   const curMK=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const groups={};
   for(const e of entries){
-    if(!e.note)continue;
+    if(!e.note||isTransfer(e))continue;
     const d=new Date(e.date+'T12:00:00');
     if(isNaN(d)||d<cutoff)continue;
     const pat=ruleKey(e.note);
@@ -1331,6 +1423,15 @@ function delForecast(i){
 // ===== PATCH sv() to handle new views =====
 function renderConfig(){
   updateExpBtn();
+  const aEl=document.getElementById('cfg-accs');
+  if(aEl){
+    aEl.innerHTML=accs.map(a=>`<div class="rule-row">
+      <div style="flex:1"><div class="rule-pat">${a.kind==='conta'?'🏦':'💳'} ${a.name}</div>
+      ${a.kind==='conta'?`<div class="rule-dest" style="display:flex;align-items:center;gap:6px;margin-top:4px">Saldo inicial R$ <input class="add-sub-inp" type="number" inputmode="decimal" style="max-width:120px;padding:4px 8px" value="${a.saldoInicial||''}" placeholder="0" onchange="setAccSaldo('${a.id}',this.value)"></div>`:''}
+      </div>
+      <button class="sub-ibtn" onclick="delAcc('${a.id}')">✕</button>
+    </div>`).join('');
+  }
   const rEl=document.getElementById('cfg-rules');
   if(rEl){
     rEl.innerHTML=rules.length?rules.map((r,i)=>`<div class="rule-row"><div style="flex:1"><div class="rule-pat">"${r.pat}"</div><div class="rule-dest">→ ${r.categoria} / ${r.subcategoria}</div></div><button class="sub-ibtn" onclick="delRule(${i})">✕</button></div>`).join(''):'<div style="font-size:12px;color:#bbb;padding:6px 0">Nenhuma regra ainda. Corrija uma categoria na importação para criar a primeira.</div>';
@@ -1399,7 +1500,7 @@ function exportCSV(){
 }
 
 function exportJSON(){
-  const backup={version:21,exportedAt:new Date().toISOString(),entries,cats,rules,budgets};
+  const backup={version:23,exportedAt:new Date().toISOString(),entries,cats,rules,budgets,accs};
   const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download=`financeiro_backup_${today()}.json`;a.click();URL.revokeObjectURL(url);
@@ -1423,11 +1524,13 @@ async function handleImportJSON(event){
         categoria:it.categoria||it.category||Object.keys(cats)[0],
         subcategoria:it.subcategoria||it.subcategory||'',
         valor:Math.abs(parseFloat(String(it.valor??it.value??0).replace(',','.'))||0),
-        desc:it.desc||it.note||''
+        desc:it.desc||it.note||'',
+        acc:it.acc||''
       }));
     } else if(data.entries&&Array.isArray(data.entries)){
       if(Array.isArray(data.rules)&&data.rules.length){rules=data.rules;ssv('fm_rules',rules);}
       if(data.budgets&&typeof data.budgets==='object'){budgets=data.budgets;ssv('fm_budget',budgets);}
+      if(Array.isArray(data.accs)&&data.accs.length){accs=data.accs;ssv('fm_accs',accs);renderAccSelects();}
       // Backup completo do app — converte campos inglês→português para renderImportResults
       parsed=data.entries.map(it=>({
         data:it.data||it.date||today(),
@@ -1435,7 +1538,8 @@ async function handleImportJSON(event){
         categoria:it.categoria||it.category||Object.keys(cats)[0],
         subcategoria:it.subcategoria||it.subcategory||'',
         valor:Math.abs(parseFloat(String(it.valor??it.value??0).replace(',','.'))||0),
-        desc:it.desc||it.note||''
+        desc:it.desc||it.note||'',
+        acc:it.acc||''
       }));
     } else {
       throw new Error('Formato de JSON não reconhecido');
@@ -1691,8 +1795,13 @@ async function handlePhoto(event){
 }
 
 // IMPORT
+function loadScript(url){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=url;s.onload=res;s.onerror=()=>rej(new Error('Falha ao carregar '+url));document.head.appendChild(s);});}
+async function ensureTesseract(){if(typeof Tesseract==='undefined')await loadScript('https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js');}
+async function ensurePdfJs(){if(typeof pdfjsLib==='undefined'){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}}
+
 async function handleImport(event,kind){
-  const file=event.target.files[0];if(!file)return;
+  const files=Array.from(event.target.files||[]);if(!files.length)return;
+  const file=files[0];
   const st=document.getElementById('imp-st');
   st.classList.add('show');st.style.color='#aaa';
   document.getElementById('imp-results').innerHTML='';
@@ -1701,20 +1810,53 @@ async function handleImport(event,kind){
   try{
     let extractedText='';
     if(kind==='csv'){
-      extractedText=await file.text();
+      const parts=[];
+      for(const f of files)parts.push(await f.text());
+      extractedText=parts.join('\n');
     }else if(kind==='img'){
-      if(typeof Tesseract==='undefined'){await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
-      st.textContent='Reconhecendo texto da imagem...';
-      const r=await Tesseract.recognize(file,'por',{logger:m=>{if(m.status==='recognizing text')st.textContent='Lendo... '+Math.round(m.progress*100)+'%';}});
-      extractedText=r.data.text;
+      await ensureTesseract();
+      const parts=[];
+      for(let i=0;i<files.length;i++){
+        const pref=files.length>1?`Imagem ${i+1}/${files.length} — `:'';
+        st.textContent=pref+'Reconhecendo texto...';
+        const r=await Tesseract.recognize(files[i],'por',{logger:m=>{if(m.status==='recognizing text')st.textContent=pref+'Lendo... '+Math.round(m.progress*100)+'%';}});
+        parts.push(r.data.text);
+      }
+      extractedText=parts.join('\n');
     }else if(kind==='pdf'){
-      st.textContent='Lendo PDF...';
-      const buf=await file.arrayBuffer();
-      const decoder=new TextDecoder('latin1');
-      const raw=decoder.decode(buf);
-      const lines=raw.split(/[\r\n]+/);
-      extractedText=lines.filter(l=>/\d+[,\.]\d{2}/.test(l)||/\d{2}\/\d{2}/.test(l)).join('\n').slice(0,6000);
-      if(extractedText.length<50){st.textContent='⚠ PDF protegido. Use a opção Imagem (print das páginas).';st.style.color='#FF9500';event.target.value='';return;}
+      st.textContent='Carregando leitor de PDF...';
+      await ensurePdfJs();
+      let pdf;
+      try{
+        pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+      }catch(pe){
+        if(pe&&pe.name==='PasswordException'){st.textContent='⚠ PDF com senha. Abra-o, remova a senha (imprimir → salvar como PDF) ou use a opção Imagem.';st.style.color='#FF9500';event.target.value='';return;}
+        throw pe;
+      }
+      const maxP=Math.min(pdf.numPages,12);
+      let text='';
+      for(let p=1;p<=maxP;p++){
+        st.textContent=`Lendo página ${p}/${maxP}...`;
+        const page=await pdf.getPage(p);
+        const tc=await page.getTextContent();
+        text+=tc.items.map(it=>it.str).join(' ')+'\n';
+      }
+      if(text.replace(/\s/g,'').length<80){
+        // PDF escaneado (sem camada de texto) → renderiza páginas e OCR
+        await ensureTesseract();
+        text='';
+        const maxO=Math.min(pdf.numPages,5);
+        for(let p=1;p<=maxO;p++){
+          st.textContent=`PDF escaneado — OCR página ${p}/${maxO} (pode demorar)...`;
+          const page=await pdf.getPage(p);
+          const vp=page.getViewport({scale:2});
+          const canvas=document.createElement('canvas');canvas.width=vp.width;canvas.height=vp.height;
+          await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+          const r=await Tesseract.recognize(canvas,'por');
+          text+=r.data.text+'\n';
+        }
+      }
+      extractedText=text;
     }
 
     if(!extractedText.trim()){st.textContent='⚠ Não consegui extrair texto.';st.style.color='#FF9500';event.target.value='';return;}
@@ -1788,12 +1930,13 @@ Regras de classificação para este cliente (Manuel, Uberlândia MG):
 - Tribeca = 🏠 Casa Cyrela / Obra/Construção
 - HM Hidráulica, Auto Tintas, Loja Elétrica, Zapi Impermeabilizantes, Frigelar = 🏠 Casa Cyrela / Materiais
 - JairIrrigacoes, Verde Flora, LDC Alumínio, MinasCook = 🏠 Casa Cyrela / Obra/Construção
-- Pagamento de fatura cartão / DEB AUTOM FAT CARTÃO = ignorar (não incluir)
+- Pagamento de fatura cartão / DEB AUTOM FAT CARTÃO / PGTO FATURA = 🔁 Transferências / Pagamento de fatura (somente em EXTRATO de conta; em fatura de cartão, ignorar)
+- TED/PIX/Transferência entre contas do próprio Manuel ou entre Vila Fit/Vila Sabor/MAAC e conta pessoal = 🔁 Transferências / Entre contas próprias ou Entre empresas (CNPJs)
 - Rendimento aplicação / BB Rende Fácil / CDB = ignorar
 
 Texto do extrato/fatura:
 """
-${extractedText.slice(0,7000)}
+${extractedText.slice(0,12000)}
 """
 
 Responda APENAS com array JSON (sem texto extra, sem markdown):
@@ -1803,9 +1946,9 @@ Regras adicionais:
 - data formato YYYY-MM-DD (sem ano use 2026)
 - tipo: saida=compras/débitos/pagamentos, entrada=créditos/recebimentos/airbnb
 - Ignore: saldo anterior, pagamento de fatura, totais, juros zerados, BB Rende Fácil, rendimento automático
-- Máximo 60 lançamentos`;
+- Máximo 100 lançamentos`;
 
-    const txt=await callAI(prompt,4000);
+    const txt=await callAI(prompt,8000);
     const m=txt.match(/\[[\s\S]*\]/);
     if(!m){st.textContent='⚠ IA não retornou dados. Tente outra imagem mais nítida.';st.style.color='#FF9500';event.target.value='';return;}
     importParsed=JSON.parse(m[0]);
@@ -1857,10 +2000,12 @@ function chgImpCat(i,cat){importParsed[i].categoria=cat;importParsed[i].subcateg
 function chgImpSub(i,sub){importParsed[i].subcategoria=sub;learnRule(importParsed[i].desc,importParsed[i].categoria,sub,importParsed[i].tipo);}
 function rmImpRow(i){importParsed.splice(i,1);renderImportResults();if(!importParsed.length)document.getElementById('imp-st').textContent='Nenhum lançamento. Importe outro arquivo.';}
 function confirmImport(){
+  const accId=document.getElementById('imp-acc')?.value||'';
+  if(accId)ssv('fm_last_acc',accId);
   let saved=0,skipped=0;
   for(const it of importParsed){
     if(it.dup&&!it.force){skipped++;continue;}
-    entries.unshift({id:Date.now()+Math.random(),date:it.data||today(),type:it.tipo||'saida',category:it.categoria,subcategory:it.subcategoria,value:Math.abs(it.valor),note:it.desc||''});
+    entries.unshift({id:Date.now()+Math.random(),date:it.data||today(),type:it.tipo||'saida',category:it.categoria,subcategory:it.subcategoria,value:Math.abs(it.valor),note:it.desc||'',acc:it.acc||accId});
     saved++;
   }
   ssv('fm_e',entries);
@@ -1890,6 +2035,8 @@ function openEdit(id){
   catSel.innerHTML=Object.keys(cats).map(c=>`<option value="${c.replace(/"/g,'&quot;')}" ${c===e.category?'selected':''}>${c}</option>`).join('');
   // populate sub select
   populateEditSubs(e.category, e.subcategory);
+  const accSel=document.getElementById('e-acc');
+  accSel.innerHTML='<option value="">— sem origem —</option>'+accs.map(a=>`<option value="${a.id}" ${a.id===e.acc?'selected':''}>${a.name}</option>`).join('');
   document.getElementById('medit').style.display='flex';
 }
 
@@ -1932,6 +2079,7 @@ function saveEdit(){
   entries[idx].category=newCat;
   entries[idx].subcategory=newSub;
   entries[idx].note=newNote;
+  entries[idx].acc=document.getElementById('e-acc').value||'';
   ssv('fm_e',entries);
   closeMEdit();
   renderList();
