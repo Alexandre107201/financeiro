@@ -229,6 +229,15 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .m-save{flex:1;padding:12px;background:#F5C542;border:none;border-radius:10px;color:#000;cursor:pointer;font-family:'Syne',sans-serif;font-weight:700;font-size:13px}
 .rename-inp{width:100%;background:#F8F8F6;border:1.5px solid #F5C542;border-radius:10px;padding:12px 14px;color:#1A1A1A;font-size:14px;outline:none;margin-bottom:20px}
 .empty{text-align:center;color:#ccc;padding:40px 20px;font-size:13px}
+
+/* EDIT MODAL */
+.edit-btn{background:none;border:none;color:#bbb;cursor:pointer;font-size:11px;margin-top:3px;display:block;padding:0;text-align:right}
+.edit-btn:active{color:#F5C542}
+.modal-edit{background:#fff;border-radius:16px;padding:24px;max-width:380px;width:100%;border:1.5px solid #E8E6E0;max-height:90vh;overflow-y:auto}
+.edit-type-row{display:flex;gap:8px;margin-bottom:16px;background:#F0EFE9;border-radius:12px;padding:4px}
+.edit-row{margin-bottom:14px}
+.edit-sel{width:100%;background:#F8F8F6;border:1.5px solid #E8E6E0;border-radius:10px;padding:11px 13px;color:#1A1A1A;font-size:13px;outline:none;font-family:'DM Mono',monospace}
+.edit-sel:focus{border-color:#F5C542}
 </style>
 </head>
 <body>
@@ -241,6 +250,41 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     <div class="modal-btns">
       <button class="m-cancel" onclick="closeMDel()">Cancelar</button>
       <button class="m-del" onclick="confirmMDel()">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div id="medit" class="modal-ov" style="display:none" onclick="if(event.target===this)closeMEdit()">
+  <div class="modal-edit">
+    <div class="modal-title">✏️ Editar lançamento</div>
+    <div class="edit-type-row">
+      <button class="tbtn saida" id="et-saida" onclick="setEditType('saida')">Saída</button>
+      <button class="tbtn entrada" id="et-entrada" onclick="setEditType('entrada')">Entrada</button>
+    </div>
+    <div class="edit-row">
+      <span class="lbl">Valor (R$)</span>
+      <input id="e-val" class="inp" type="number" inputmode="decimal" style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800">
+    </div>
+    <div class="edit-row">
+      <span class="lbl">Data</span>
+      <input id="e-date" class="inp" type="date">
+    </div>
+    <div class="edit-row">
+      <span class="lbl">Categoria</span>
+      <select id="e-cat" class="edit-sel" onchange="onEditCatChange()"></select>
+    </div>
+    <div class="edit-row">
+      <span class="lbl">Subcategoria</span>
+      <select id="e-sub" class="edit-sel"></select>
+    </div>
+    <div class="edit-row">
+      <span class="lbl">Obs</span>
+      <input id="e-note" class="inp" type="text" placeholder="Observação opcional">
+    </div>
+    <div class="modal-btns">
+      <button class="m-cancel" onclick="closeMEdit()">Cancelar</button>
+      <button class="m-save" onclick="saveEdit()">Salvar</button>
     </div>
   </div>
 </div>
@@ -596,6 +640,7 @@ function renderList(){
       </div>
       <div style="text-align:right;margin-left:10px;flex-shrink:0">
         <div class="ec-val ${e.type}">${e.type==='entrada'?'+':'-'}${fBRL(e.value)}</div>
+        <button class="edit-btn" onclick="openEdit(${e.id})">editar</button>
         <button class="del-btn" onclick="openDel('entry',${e.id})">excluir</button>
       </div>
     </div>`).join('');
@@ -1566,6 +1611,66 @@ function confirmImport(){
   updateExpBtn();
 }
 function cancelImport(){importParsed=[];document.getElementById('imp-results').innerHTML='';document.getElementById('imp-st').textContent='Cancelado.';}
+
+// ===== EDIT ENTRY =====
+let editId=null, editType='saida';
+
+function openEdit(id){
+  const e=entries.find(x=>x.id===id);
+  if(!e) return;
+  editId=id;
+  editType=e.type;
+  setEditType(editType);
+  document.getElementById('e-val').value=e.value;
+  document.getElementById('e-date').value=e.date;
+  document.getElementById('e-note').value=e.note||'';
+  // populate category select
+  const catSel=document.getElementById('e-cat');
+  catSel.innerHTML=Object.keys(cats).map(c=>`<option value="${c.replace(/"/g,'&quot;')}" ${c===e.category?'selected':''}>${c}</option>`).join('');
+  // populate sub select
+  populateEditSubs(e.category, e.subcategory);
+  document.getElementById('medit').style.display='flex';
+}
+
+function setEditType(t){
+  editType=t;
+  document.getElementById('et-saida').className='tbtn saida'+(t==='saida'?' on':'');
+  document.getElementById('et-entrada').className='tbtn entrada'+(t==='entrada'?' on':'');
+}
+
+function onEditCatChange(){
+  const cat=document.getElementById('e-cat').value;
+  populateEditSubs(cat,'');
+}
+
+function populateEditSubs(cat, curSub){
+  const subs=cats[cat]||[];
+  const subSel=document.getElementById('e-sub');
+  subSel.innerHTML=subs.map(s=>`<option value="${s.replace(/"/g,'&quot;')}" ${s===curSub?'selected':''}>${s}</option>`).join('');
+}
+
+function closeMEdit(){
+  document.getElementById('medit').style.display='none';
+  editId=null;
+}
+
+function saveEdit(){
+  if(!editId) return;
+  const val=parseFloat(document.getElementById('e-val').value);
+  if(!val||isNaN(val)){alert('Valor inválido');return;}
+  const idx=entries.findIndex(x=>x.id===editId);
+  if(idx===-1) return;
+  entries[idx].type=editType;
+  entries[idx].value=Math.abs(val);
+  entries[idx].date=document.getElementById('e-date').value;
+  entries[idx].category=document.getElementById('e-cat').value;
+  entries[idx].subcategory=document.getElementById('e-sub').value;
+  entries[idx].note=document.getElementById('e-note').value;
+  ssv('fm_e',entries);
+  closeMEdit();
+  renderList();
+  updateExpBtn();
+}
 
 init();
 </script>
