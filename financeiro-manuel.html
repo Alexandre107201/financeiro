@@ -1136,14 +1136,15 @@ async function handleImportJSON(event){
     // Suporta dois formatos: backup completo {entries:[...]} ou array direto [{data,desc,valor,...}]
     let parsed=[];
     if(Array.isArray(data)){
-      // Array direto gerado por Claude no chat — mantém campos em português para renderImportResults
+      // Array direto gerado por Claude no chat
       parsed=data.map(it=>({
-        data:it.data||it.date||today(),
-        tipo:it.tipo||it.type||'saida',
-        categoria:it.categoria||it.category||Object.keys(cats)[0],
-        subcategoria:it.subcategoria||it.subcategory||'',
-        valor:Math.abs(parseFloat(String(it.valor??it.value??0).replace(',','.'))||0),
-        desc:it.desc||it.note||''
+        id:Date.now()+Math.random(),
+        date:it.data||it.date||today(),
+        type:it.tipo||it.type||'saida',
+        category:it.categoria||it.category||Object.keys(cats)[0],
+        subcategory:it.subcategoria||it.subcategory||'',
+        value:Math.abs(parseFloat(it.valor||it.value||0)),
+        note:it.desc||it.note||''
       }));
     } else if(data.entries&&Array.isArray(data.entries)){
       // Backup completo do app
@@ -1153,9 +1154,9 @@ async function handleImportJSON(event){
     }
     // Corrige categorias inválidas
     parsed.forEach(it=>{
-      if(!cats[it.categoria])it.categoria=Object.keys(cats)[0];
-      if(!it.subcategoria||!cats[it.categoria]||!cats[it.categoria].includes(it.subcategoria))
-        it.subcategoria=cats[it.categoria]?.[0]||'';
+      if(!cats[it.category])it.category=Object.keys(cats)[0];
+      if(!it.subcategory||!cats[it.category]||!cats[it.category].includes(it.subcategory))
+        it.subcategory=cats[it.category]?.[0]||'';
     });
     importParsed=parsed;
     st.textContent=`✓ ${parsed.length} lançamentos encontrados. Revise e confirme abaixo.`;
