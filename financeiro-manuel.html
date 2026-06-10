@@ -1146,8 +1146,15 @@ async function handleImportJSON(event){
         desc:it.desc||it.note||''
       }));
     } else if(data.entries&&Array.isArray(data.entries)){
-      // Backup completo do app
-      parsed=data.entries;
+      // Backup completo do app — converte campos inglês→português para renderImportResults
+      parsed=data.entries.map(it=>({
+        data:it.data||it.date||today(),
+        tipo:it.tipo||it.type||'saida',
+        categoria:it.categoria||it.category||Object.keys(cats)[0],
+        subcategoria:it.subcategoria||it.subcategory||'',
+        valor:Math.abs(parseFloat(String(it.valor??it.value??0).replace(',','.'))||0),
+        desc:it.desc||it.note||''
+      }));
     } else {
       throw new Error('Formato de JSON não reconhecido');
     }
