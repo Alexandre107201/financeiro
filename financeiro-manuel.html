@@ -423,6 +423,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
     <div class="cfg-backup-desc">Exporte seus lançamentos como CSV ou JSON completo. Guarde no Google Drive.</div>
     <button class="exp-btn" id="exp-btn" onclick="exportCSV()">⬇ Exportar CSV</button>
     <button class="exp-btn" style="margin-top:8px;background:#6C5CE7;color:#fff;border-color:#6C5CE7" onclick="exportJSON()">⬇ Exportar JSON (backup completo)</button>
+  <button class="exp-btn" style="background:#FF4757;margin-top:8px" onclick="clearAllData()">🗑️ Limpar todos os lançamentos</button>
   </div>
   <div class="new-cat-card">
     <span class="lbl">Nova Categoria</span>
@@ -1826,6 +1827,14 @@ function renderImportResults(){
 function chgImpCat(i,cat){importParsed[i].categoria=cat;importParsed[i].subcategoria=cats[cat][0];renderImportResults();}
 function chgImpSub(i,sub){importParsed[i].subcategoria=sub;}
 function rmImpRow(i){importParsed.splice(i,1);renderImportResults();if(!importParsed.length)document.getElementById('imp-st').textContent='Nenhum lançamento. Importe outro arquivo.';}
+function clearAllData(){
+  if(!confirm('⚠️ Isso apagará TODOS os '+entries.length+' lançamentos do localStorage. Esta ação não pode ser desfeita. Continuar?'))return;
+  entries=[];
+  ssv('fm_e',entries);
+  updateExpBtn();
+  alert('✓ Todos os lançamentos foram removidos. Agora importe seus PDFs novamente.');
+}
+
 function confirmImport(){
   for(const it of importParsed){entries.unshift({id:Date.now()+Math.random(),date:it.data||today(),type:it.tipo||'saida',category:it.categoria,subcategory:it.subcategoria,value:Math.abs(it.valor),note:it.desc||''});}
   ssv('fm_e',entries);
