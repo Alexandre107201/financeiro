@@ -401,9 +401,9 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <div id="view-import" class="view">
   <div class="cfg-title">Importar fatura ou extrato</div>
   <p style="font-size:12px;color:#888;margin-bottom:14px">Importe print ou CSV da sua fatura. A IA classifica automaticamente. Você revisa antes de salvar.</p>
-  <input type="file" id="imp-img" accept="image/*" style="display:none" onchange="handleImport(event,'img')">
+  <input type="file" id="imp-img" accept="image/*" multiple style="display:none" onchange="handleImportMulti(event,'img')">
   <input type="file" id="imp-csv" accept=".csv,text/csv" style="display:none" onchange="handleImport(event,'csv')">
-  <input type="file" id="imp-pdf" accept="application/pdf" style="display:none" onchange="handleImport(event,'pdf')">
+  <input type="file" id="imp-pdf" accept="application/pdf" multiple style="display:none" onchange="handleImportMulti(event,'pdf')">
   <input type="file" id="imp-json" accept="application/json,.json" style="display:none" onchange="handleImportJSON(event)">
   <div class="imp-opts">
     <button class="imp-btn" onclick="document.getElementById('imp-img').click()"><span class="imp-icon">🖼️</span>Imagem</button>
@@ -1444,6 +1444,233 @@ async function handlePhoto(event){
 }
 
 // IMPORT
+// ===== PDF EXTRACTION via pdf.js =====
+async function extractPdfText(file,st){
+  if(typeof pdfjsLib==='undefined'){
+    await new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      s.onload=()=>{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';res();};
+      s.onerror=rej;document.head.appendChild(s);
+    });
+  }
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let text='';
+  for(let i=1;i<=pdf.numPages;i++){
+    const page=await pdf.getPage(i);
+    const tc=await page.getTextContent();
+    const pageText=tc.items.map(it=>it.str).join(' ');
+    text+=pageText+'\n';
+    if(st)st.textContent=`Lendo PDF... página ${i}/${pdf.numPages}`;
+  }
+  return text;
+}
+
+// ===== DEDICATED PARSERS: BB fatura, BB extrato =====
+function tryDedicatedParser(text,filename){
+  const t=text;
+  // BB fatura (Altus/Ourocard) — identifica por "SALDO FATURA ANTERIOR" ou "Lançamentos nesta fatura"
+  if(/SALDO FATURA ANTERIOR|Lançamentos nesta fatura|ALTUS LIV VISA|OUROCARD|ELO NANQUIM/i.test(t)){
+    return parseBBFatura(t);
+  }
+  // BB extrato conta corrente — identifica por "Pix - Recebido" + "BB Rende Fácil" + "Agência:"
+  if(/Agência:.*Conta:|BB Rende Fácil|Pix - Recebido|Pix - Enviado/i.test(t) && /Rende Facil|SISBB/i.test(t)){
+    return parseBBExtrato(t);
+  }
+  return null; // Santander e outros vão para a IA
+}
+
+function parseBBFatura(text){
+  const entries=[];
+  const IGNORAR=/SALDO FATURA ANTERIOR|PGTO DEBITO CONTA|DEB AUTOM|DESC AUTOMATICO ANUD|Subtotal|Total da Fatura|Pagamentos\/Créditos|Lançamentos nesta fatura|Confira aqui|SISBB|Agência|Página \d/i;
+  // Linha típica: "DD/MM DESCRIÇÃO [CIDADE] BR R$ VALOR" ou "DD/MM DESC PARC XX/YY CIDADE BR R$ VALOR"
+  const lineRe=/(\d{2}\/\d{2})\s+(.+?)\s+(?:BR|US|AR|UY|PT)\s+R\$\s*([\d\.,]+)/g;
+  // Inferir ano da fatura a partir do texto
+  let fatYear='2026';
+  const yMatch=text.match(/vencimento\s+\d{2}\/\d{2}\/(\d{4})|fechada em \d{2}\/\d{2}\/(\d{4})/i);
+  if(yMatch)fatYear=yMatch[1]||yMatch[2];
+
+  let m;
+  while((m=lineRe.exec(text))!==null){
+    const [,dateRaw,desc,valStr]=m;
+    if(IGNORAR.test(desc))continue;
+    const val=parseFloat(valStr.replace(/\./g,'').replace(',','.'));
+    if(isNaN(val)||val<=0)continue;
+    // valores negativos (créditos) — pular
+    const context=text.slice(Math.max(0,m.index-5),m.index+5);
+    if(context.includes('- R$')||context.includes('-R$'))continue;
+    const [dd,mm2]=dateRaw.split('/');
+    // mês >= 10 provavelmente ano anterior se fatura é jan-abr
+    const baseMonth=parseInt(fatYear.slice(-2)||'26');
+    let year=fatYear;
+    const mo=parseInt(mm2);
+    // Se mês da compra > mês de fechamento + 1, é ano anterior
+    const fatMonth=fatYear==='2026'?5:parseInt((text.match(/vencimento\s+\d{2}\/(\d{2})/i)||['','05'])[1]);
+    if(mo>fatMonth+1)year=String(parseInt(fatYear)-1);
+    const date=`${year}-${mm2}-${dd}`;
+    const cat=autoClassify(desc);
+    entries.push({data:date,desc:desc.replace(/\s{2,}/g,' ').trim(),valor:val,tipo:'saida',...cat});
+  }
+  return entries.length?entries:null;
+}
+
+function parseBBExtrato(text){
+  const entries=[];
+  const IGNORAR=/BB Rende Fácil|Rende Facil|Saldo Anterior|S A L D O|Pagto cartão crédito|Pix - Rejeitado|Boleto devolvido|Pix-Envio devolvido|SISBB|Agência:|Data Movim\.|Informações adicionais/i;
+  const lines=text.split(/\n/);
+  // Extrato BB: data no formato DD/MM/YYYY, valor com C ou D no final
+  const dateRe=/^(\d{2}\/\d{2}\/\d{4})/;
+  const valRe=/([\d\.]+,\d{2})\s+(C|D)\s*$/;
+
+  let i=0;
+  while(i<lines.length){
+    const line=lines[i].trim();
+    if(IGNORAR.test(line)){i++;continue;}
+    const vm=valRe.exec(line);
+    if(vm){
+      const val=parseFloat(vm[1].replace(/\./g,'').replace(',','.'));
+      const cd=vm[2];
+      if(val===0){i++;continue;}
+      // Buscar data e descrição nas linhas próximas
+      let date='';let desc='';
+      for(let j=Math.max(0,i-3);j<=i;j++){
+        const dm=dateRe.exec(lines[j]?.trim()||'');
+        if(dm){const[,d]=dm;const[dd,mm,yy]=d.split('/');date=`${yy}-${mm}-${dd}`;break;}
+      }
+      // Descrição: linha atual antes do valor, ou linha anterior
+      const descLine=line.replace(valRe,'').trim();
+      const prevLine=(lines[i-1]||'').trim();
+      desc=descLine||prevLine;
+      desc=desc.replace(dateRe,'').trim();
+      if(!desc||IGNORAR.test(desc)){i++;continue;}
+      const tipo=cd==='C'?'entrada':'saida';
+      const cat=autoClassify(desc);
+      entries.push({data:date,desc:desc.slice(0,60),valor:val,tipo,...cat});
+    }
+    i++;
+  }
+  return entries.length?entries:null;
+}
+
+function autoClassify(desc){
+  const d=desc.toLowerCase();
+  // Retorna {categoria, subcategoria}
+  if(/abastec|posto (parque|moinho|ipiranga|bandei|trevo)|bahamas.*posto|rodoposto|rodosnack|d l itaim|dl itaim/i.test(d))return{categoria:'🐎 Mustang',subcategoria:'Gasolina (Abastece Aí/Posto)'};
+  if(/sem parar/i.test(d))return{categoria:'🐎 Mustang',subcategoria:'Sem Parar/Pedágio'};
+  if(/b32 park|indigo|parking|estacion/i.test(d))return{categoria:'🐎 Mustang',subcategoria:'Estacionamento'};
+  if(/puravida|essential|integralmedic|nutramedic|harts alim|maxmebio|personalize n|mercafe|iherb|roots wellne|truesource|pb\*true/i.test(d))return{categoria:'💊 Saúde & Bem-estar',subcategoria:'Suplementos'};
+  if(/drogasil|drogaria pacheco|paguemenos|farmacia panvel/i.test(d))return{categoria:'💊 Saúde & Bem-estar',subcategoria:'Farmácia (Drogasil/Pacheco)'};
+  if(/diofarmed|farmacia artesanal|pg \*farmacia|pg\*farmacia/i.test(d))return{categoria:'💊 Saúde & Bem-estar',subcategoria:'Farmácia Artesanal/Manipulação'};
+  if(/ipac/i.test(d))return{categoria:'💊 Saúde & Bem-estar',subcategoria:'Médico/Exames (IPAC)'};
+  if(/danielle vieira/i.test(d))return{categoria:'💊 Saúde & Bem-estar',subcategoria:'Massagem (Danielle)'};
+  if(/ananda|jiu.?ji/i.test(d))return{categoria:'🎓 Educação',subcategoria:'Jiu-Jitsu (Ananda)'};
+  if(/geane machado/i.test(d))return{categoria:'🎓 Educação',subcategoria:'Inglês (Geane)'};
+  if(/netflix/i.test(d))return{categoria:'📱 Assinaturas Digitais',subcategoria:'Netflix'};
+  if(/spotify/i.test(d))return{categoria:'📱 Assinaturas Digitais',subcategoria:'Spotify'};
+  if(/youtube|google youtube/i.test(d))return{categoria:'📱 Assinaturas Digitais',subcategoria:'YouTube Premium (Google)'};
+  if(/chatgpt|openai/i.test(d))return{categoria:'📱 Assinaturas Digitais',subcategoria:'ChatGPT (Google/OpenAI)'};
+  if(/microsoft|onedrive|ppro.*micro/i.test(d))return{categoria:'📱 Assinaturas Digitais',subcategoria:'Microsoft/OneDrive'};
+  if(/amazon (music|prime)|amazonprime/i.test(d))return{categoria:'📱 Assinaturas Digitais',subcategoria:'Amazon Music/Prime'};
+  if(/esfera|htm.*meuassessor/i.test(d))return{categoria:'📱 Assinaturas Digitais',subcategoria:'Esfera/Clube Livelo'};
+  if(/vivo|telefonica|algar|conta vivo/i.test(d))return{categoria:'📱 Assinaturas Digitais',subcategoria:'Outros Digitais'};
+  if(/jr guimaraes|j r guimaraes/i.test(d))return{categoria:'🧑‍💼 Serviços Profissionais',subcategoria:'Contabilidade (JR Guimarães)'};
+  if(/icaro design|ícaro design/i.test(d))return{categoria:'🧑‍💼 Serviços Profissionais',subcategoria:'Design/Marketing (Ícaro)'};
+  if(/pedro.?henrique/i.test(d))return{categoria:'🧑‍💼 Serviços Profissionais',subcategoria:'Pedro Henrique (serviços)'};
+  if(/yelumseg/i.test(d))return{categoria:'🛡️ Seguros & Previdência',subcategoria:'Yelumseg (parcelas)'};
+  if(/hdi seguros/i.test(d))return{categoria:'🛡️ Seguros & Previdência',subcategoria:'HDI Seguros'};
+  if(/mongeral/i.test(d))return{categoria:'🛡️ Seguros & Previdência',subcategoria:'Mongeral (previdência)'};
+  if(/bb admin cons|bb consórcio/i.test(d))return{categoria:'🎰 Consórcios',subcategoria:'BB Consórcio 1 (R$3.696)'};
+  if(/porto seguro cons|porto cons/i.test(d))return{categoria:'🎰 Consórcios',subcategoria:'Porto Seguro Consórcio 1 (R$1.296)'};
+  if(/santander.*cons|prestação cons/i.test(d))return{categoria:'🎰 Consórcios',subcategoria:'Santander Consórcio (R$1.360)'};
+  if(/llz|versa loft/i.test(d))return{categoria:'🏗️ Imóveis Carol & Manuel',subcategoria:'Financiamento Versa (LLZ)'};
+  if(/modulo imov|módulo imóv/i.test(d))return{categoria:'🏗️ Imóveis Carol & Manuel',subcategoria:'Mútuo Imóvel (Módulo)'};
+  if(/itau.*cons|CO adm/i.test(d))return{categoria:'🏗️ Imóveis Carol & Manuel',subcategoria:'Financiamento D Haus'};
+  if(/m18 admin/i.test(d))return{categoria:'🏗️ Imóveis Carol & Manuel',subcategoria:'Terreno ITV (M18)'};
+  if(/cyrela|pacheco const|construtora pacheco/i.test(d))return{categoria:'🏠 Casa Cyrela',subcategoria:'Obra/Construção'};
+  if(/tribeca/i.test(d))return{categoria:'🏠 Casa Cyrela',subcategoria:'Obra/Construção'};
+  if(/hm hidraulica|auto tintas|loja eletrica|zapi|frigelar/i.test(d))return{categoria:'🏠 Casa Cyrela',subcategoria:'Materiais'};
+  if(/jairrigacoes|verde flora|ldc alum|minascook/i.test(d))return{categoria:'🏠 Casa Cyrela',subcategoria:'Obra/Construção'};
+  if(/praia clube/i.test(d))return{categoria:'👨‍👩‍👧 Família',subcategoria:'Praia Clube'};
+  if(/mercadolivre|mercado livre/i.test(d))return{categoria:'👤 Pessoal',subcategoria:'Compras Online (MercadoLivre)'};
+  if(/shopee|aliexpress|shein/i.test(d))return{categoria:'👤 Pessoal',subcategoria:'Compras Online (Shopee/AliExpress)'};
+  if(/minimercado help|minimercadohelp/i.test(d))return{categoria:'👤 Pessoal',subcategoria:'Mercado/Minimercado Help'};
+  if(/ifood|ifd/i.test(d))return{categoria:'👤 Pessoal',subcategoria:'Delivery (iFood/Outros)'};
+  if(/sixblades/i.test(d))return{categoria:'👤 Pessoal',subcategoria:'Barbearia (Sixblades)'};
+  if(/coco bambu|noema|angus|espetinho|baleia|frevo|bela vista|restaurante|grill|gelato|saldoce|emporio|food/i.test(d))return{categoria:'👤 Pessoal',subcategoria:'Restaurantes (Coco Bambu/Noema)'};
+  if(/pao de acucar|supermercado|mercado(?!.*livre)|carnes|gabriel villenis/i.test(d))return{categoria:'👤 Pessoal',subcategoria:'Supermercado/Alimentação'};
+  if(/gol linhas|latam|ingresse|passagem|glow park|ita center/i.test(d))return{categoria:'✈️ Viagem & Lazer',subcategoria:'Viagens/Ingressos'};
+  if(/pref.*uberlandia|tributos munic|dmae/i.test(d))return{categoria:'📋 Impostos & Taxas',subcategoria:'IPTU (Pref. Uberlândia)'};
+  if(/secret.*fazenda|fazenda mg/i.test(d))return{categoria:'📋 Impostos & Taxas',subcategoria:'Secretaria Fazenda MG'};
+  if(/iof/i.test(d))return{categoria:'📋 Impostos & Taxas',subcategoria:'IOF'};
+  if(/anuidade/i.test(d))return{categoria:'📋 Impostos & Taxas',subcategoria:'Anuidade Cartão Santander'};
+  if(/tarifa pacote/i.test(d))return{categoria:'📋 Impostos & Taxas',subcategoria:'Tarifa Pacote BB'};
+  if(/airbnb/i.test(d))return{categoria:'➕ Receitas',subcategoria:'Airbnb (Universitá)'};
+  if(/meliuz|méliuz/i.test(d))return{categoria:'➕ Receitas',subcategoria:'Méliuz (cashback)'};
+  if(/vila fit/i.test(d))return{categoria:'🏢 Vila Fit',subcategoria:'Vila Fit'};
+  if(/maac serv|maac empree/i.test(d))return{categoria:'🔄 Operações entre empresas',subcategoria:'MAAC Serviço'};
+  if(/limp mais/i.test(d))return{categoria:'🏡 Rancho',subcategoria:'Limp Mais (piscina)'};
+  if(/escorudi/i.test(d))return{categoria:'🏡 Rancho',subcategoria:'Escorudi (escoras)'};
+  if(/sodramar/i.test(d))return{categoria:'🏡 Rancho',subcategoria:'Manutenção'};
+  if(/ana cristina|ana c\. silva/i.test(d))return{categoria:'🏡 Rancho',subcategoria:'Ana C. Silva (funcionária)'};
+  if(/cemig/i.test(d))return{categoria:'🧑‍💼 Serviços Profissionais',subcategoria:'Contas (Energia/Água/Telefone)'};
+  return{categoria:'👤 Pessoal',subcategoria:'Outros'};
+}
+
+async function handleImportMulti(event,kind){
+  const files=Array.from(event.target.files);
+  if(!files.length)return;
+  if(files.length===1){return handleImport(event,kind);}
+  const st=document.getElementById('imp-st');
+  st.classList.add('show');st.style.color='#aaa';
+  document.getElementById('imp-results').innerHTML='';
+  importParsed=[];
+  let allResults=[];
+  for(let i=0;i<files.length;i++){
+    const file=files[i];
+    st.textContent=`Processando arquivo ${i+1} de ${files.length}: ${file.name}...`;
+    try{
+      let extractedText='';
+      if(kind==='img'){
+        if(typeof Tesseract==='undefined'){await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
+        st.textContent=`Arquivo ${i+1}/${files.length} — Reconhecendo texto: ${file.name}...`;
+        const r=await Tesseract.recognize(file,'por',{logger:m=>{if(m.status==='recognizing text')st.textContent=`Arquivo ${i+1}/${files.length} — Lendo ${Math.round(m.progress*100)}%: ${file.name}`;}});
+        extractedText=r.data.text;
+      }else if(kind==='pdf'){
+        st.textContent=`Arquivo ${i+1}/${files.length} — Lendo PDF: ${file.name}...`;
+        extractedText=await extractPdfText(file,st);
+        if(!extractedText||extractedText.length<50){st.textContent=`⚠ Arquivo ${i+1}/${files.length} — PDF protegido: ${file.name}. Pulando...`;st.style.color='#FF9500';await new Promise(r=>setTimeout(r,1500));st.style.color='#aaa';continue;}
+        const ded=tryDedicatedParser(extractedText,file.name);
+        if(ded){allResults=allResults.concat(ded);st.textContent=`✓ ${allResults.length} lançamentos acumulados (parser dedicado, arquivo ${i+1}/${files.length})`;st.style.color='#aaa';continue;}
+      }
+      if(!extractedText.trim()){continue;}
+      st.textContent=`Arquivo ${i+1}/${files.length} — IA classificando: ${file.name}...`;
+      const catList=Object.keys(cats).join(', ');
+      const prompt=`Você é um assistente financeiro brasileiro especializado em classificar extratos bancários e faturas de cartão.\n\nCategorias disponíveis: ${catList}\n\nRegras de classificação para este cliente (Manuel, Uberlândia MG):\n- Sixblades Uberlândia = 👤 Pessoal / Barbearia (Sixblades)\n- Coco Bambu = 👤 Pessoal / Restaurantes (Coco Bambu/Noema)\n- Abastece Aí, Posto Parque, Posto Ipiranga, Bahamas Posto, Rodoposto = 🐎 Mustang / Gasolina (Abastece Aí/Posto)\n- Sem Parar = 🐎 Mustang / Sem Parar/Pedágio\n- Puravida, Essential, Integralmedic, Nutramedic, Harts Alimentos, Maxmebio, Personalize Nutrition, Mercafe, iHerb, Roots Wellness, TrueSource = 💊 Saúde & Bem-estar / Suplementos\n- IPAC = 💊 Saúde & Bem-estar / Médico/Exames (IPAC)\n- Drogasil, Drogaria Pacheco, PagueMenos = 💊 Saúde & Bem-estar / Farmácia (Drogasil/Pacheco)\n- Diofarmed, Farmácia Artesanal, PG Farmacia = 💊 Saúde & Bem-estar / Farmácia Artesanal/Manipulação\n- Ananda Academia de Jiu Jitsu = 🎓 Educação / Jiu-Jitsu (Ananda)\n- Geane Machado = 🎓 Educação / Inglês (Geane)\n- Danielle Vieira = 💊 Saúde & Bem-estar / Massagem (Danielle)\n- Yelumseg = 🛡️ Seguros & Previdência / Yelumseg (parcelas)\n- HDI Seguros = 🛡️ Seguros & Previdência / HDI Seguros\n- Mongeral Aegon = 🛡️ Seguros & Previdência / Mongeral (previdência)\n- Santander Seguros = 🛡️ Seguros & Previdência / Santander Seguros (previdência)\n- BB Admin Consórcio = 🎰 Consórcios / BB Consórcio 1 (R$3.696)\n- Porto Seguro Consórcio / Porto Consórcio = 🎰 Consórcios / Porto Seguro Consórcio 1 (R$1.296)\n- Santander Brasil Adm Consórcio / Prestação Consórcio = 🎰 Consórcios / Santander Consórcio (R$1.360)\n- Módulo Imóveis = 🏗️ Imóveis Carol & Manuel / Mútuo Imóvel (Módulo)\n- LLZ Solução Cobrança, Versa Loft = 🏗️ Imóveis Carol & Manuel / Financiamento Versa (LLZ)\n- Itaú Administradora de Consórcio/CO = 🏗️ Imóveis Carol & Manuel / Financiamento D Haus\n- M18 Administração = 🏗️ Imóveis Carol & Manuel / Terreno ITV (M18)\n- Associação Cyrela Landscape / Construtora Pacheco = 🏠 Casa Cyrela\n- Praia Clube = 👨‍👩‍👧 Família / Praia Clube\n- Netflix = 📱 Assinaturas Digitais / Netflix\n- Spotify = 📱 Assinaturas Digitais / Spotify\n- YouTube / Google YouTube = 📱 Assinaturas Digitais / YouTube Premium (Google)\n- ChatGPT / DL Google ChatGP = 📱 Assinaturas Digitais / ChatGPT (Google/OpenAI)\n- Microsoft / OneDrive / PPRO Microsoft = 📱 Assinaturas Digitais / Microsoft/OneDrive\n- Amazon Prime / AmazonPrimeBR = 📱 Assinaturas Digitais / Amazon Music/Prime\n- Amazon Music = 📱 Assinaturas Digitais / Amazon Music/Prime\n- Esfera, HTM MeuAssessor = 📱 Assinaturas Digitais / Esfera/Clube Livelo\n- Conta Vivo, Vivo Móvel, Telefônica = 📱 Assinaturas Digitais / Outros Digitais\n- Algar Telecom = 🧑‍💼 Serviços Profissionais / Outros Serviços\n- JR Guimarães Contabilidade = 🧑‍💼 Serviços Profissionais / Contabilidade (JR Guimarães)\n- Ícaro Design / Icaro Design = 🧑‍💼 Serviços Profissionais / Design/Marketing (Ícaro)\n- Pedro Henrique = 🧑‍💼 Serviços Profissionais / Pedro Henrique (serviços)\n- MercadoLivre = 👤 Pessoal / Compras Online (MercadoLivre)\n- Shopee, AliExpress, Shein, Amazon (compras) = 👤 Pessoal / Compras Online (Shopee/AliExpress)\n- Minimercado Help = 👤 Pessoal / Mercado/Minimercado Help\n- iFood, IFD = 👤 Pessoal / Delivery (iFood/Outros)\n- GOL Linhas, LATAM, Passagem, Ingresse = ✈️ Viagem & Lazer\n- Glow Park, ITA Center Park = ✈️ Viagem & Lazer / Ingresso/Parque (Glow Park etc)\n- Indigo, B32 Park, EI Parking = 🐎 Mustang / Estacionamento\n- Pref. Municipal Uberlândia, Tributos Municipais = 📋 Impostos & Taxas / IPTU (Pref. Uberlândia)\n- Secretaria Fazenda MG = 📋 Impostos & Taxas / Secretaria Fazenda MG\n- IOF = 📋 Impostos & Taxas / IOF\n- Anuidade Diferenciada = 📋 Impostos & Taxas / Anuidade Cartão Santander\n- Tarifa Pacote Serviços = 📋 Impostos & Taxas / Tarifa Pacote BB\n- Airbnb = ➕ Receitas / Airbnb (Universitá) [entrada]\n- Congregação Cristã = ➕ Receitas / Congregação Cristã [entrada]\n- Méliuz = ➕ Receitas / Méliuz (cashback) [entrada]\n- Vila Fit = 🏢 Vila Fit (se saída = insumos, se entrada = repasse)\n- Vila Gourmet = 🍽️ Vila Gourmet\n- MAAC Serviço = 🔄 Operações entre empresas\n- Limp Mais = 🏡 Rancho / Limp Mais (piscina)\n- Escorudi = 🏡 Rancho / Escorudi (escoras)\n- Sodramar = 🏡 Rancho / Manutenção\n- Ana Cristina / Ana C. Silva = 🏡 Rancho / Ana C. Silva (funcionária)\n- Tribeca = 🏠 Casa Cyrela / Obra/Construção\n- HM Hidráulica, Auto Tintas, Loja Elétrica, Zapi Impermeabilizantes, Frigelar = 🏠 Casa Cyrela / Materiais\n- JairIrrigacoes, Verde Flora, LDC Alumínio, MinasCook = 🏠 Casa Cyrela / Obra/Construção\n- Pagamento de fatura cartão / DEB AUTOM FAT CARTÃO = ignorar (não incluir)\n- Rendimento aplicação / BB Rende Fácil / CDB = ignorar\n\nTexto do extrato/fatura:\n\"\"\"\n${extractedText.slice(0,7000)}\n\"\"\"\n\nResponda APENAS com array JSON (sem texto extra, sem markdown):\n[{"data":"2026-05-15","desc":"COCO BAMBU UBERLANDIA","valor":436.74,"tipo":"saida","categoria":"👤 Pessoal","subcategoria":"Restaurantes (Coco Bambu/Noema)"}]\n\nRegras adicionais:\n- data formato YYYY-MM-DD (sem ano use 2026)\n- tipo: saida=compras/débitos/pagamentos, entrada=créditos/recebimentos/airbnb\n- Ignore: saldo anterior, pagamento de fatura, totais, juros zerados, BB Rende Fácil, rendimento automático\n- Máximo 60 lançamentos`;
+      const txt=await callAI(prompt,4000);
+      const m=txt.match(/\[[\s\S]*\]/);
+      if(!m)continue;
+      const parsed=JSON.parse(m[0]);
+      parsed.forEach(it=>{
+        if(!cats[it.categoria])it.categoria=Object.keys(cats)[0];
+        if(!it.subcategoria||!cats[it.categoria].includes(it.subcategoria))it.subcategoria=cats[it.categoria][0];
+      });
+      allResults=allResults.concat(parsed);
+      st.textContent=`✓ ${allResults.length} lançamentos acumulados (arquivo ${i+1}/${files.length})`;
+      st.style.color='#aaa';
+    }catch(e){
+      st.textContent=`⚠ Erro no arquivo ${i+1}/${files.length}: ${file.name}. Continuando...`;st.style.color='#FF4757';
+      await new Promise(r=>setTimeout(r,1500));st.style.color='#aaa';
+    }
+  }
+  event.target.value='';
+  if(!allResults.length){st.textContent='⚠ Nenhum lançamento encontrado nos arquivos.';st.style.color='#FF9500';return;}
+  importParsed=allResults;
+  st.textContent=`✓ ${importParsed.length} lançamentos encontrados em ${files.length} arquivos. Revise e confirme.`;
+  st.style.color='#00B894';
+  renderImportResults();
+}
+
 async function handleImport(event,kind){
   const file=event.target.files[0];if(!file)return;
   const st=document.getElementById('imp-st');
@@ -1462,12 +1689,15 @@ async function handleImport(event,kind){
       extractedText=r.data.text;
     }else if(kind==='pdf'){
       st.textContent='Lendo PDF...';
-      const buf=await file.arrayBuffer();
-      const decoder=new TextDecoder('latin1');
-      const raw=decoder.decode(buf);
-      const lines=raw.split(/[\r\n]+/);
-      extractedText=lines.filter(l=>/\d+[,\.]\d{2}/.test(l)||/\d{2}\/\d{2}/.test(l)).join('\n').slice(0,6000);
-      if(extractedText.length<50){st.textContent='⚠ PDF protegido. Use a opção Imagem (print das páginas).';st.style.color='#FF9500';event.target.value='';return;}
+      extractedText=await extractPdfText(file,st);
+      if(!extractedText||extractedText.length<50){st.textContent='⚠ PDF protegido ou vazio. Use a opção Imagem.';st.style.color='#FF9500';event.target.value='';return;}
+      const dedicated=tryDedicatedParser(extractedText,file.name);
+      if(dedicated){
+        importParsed=dedicated;
+        importParsed.forEach(it=>{if(!cats[it.categoria])it.categoria=Object.keys(cats)[0];if(!it.subcategoria||!cats[it.categoria].includes(it.subcategoria))it.subcategoria=cats[it.categoria][0];});
+        st.textContent=`✓ ${importParsed.length} lançamentos extraídos (parser dedicado). Revise e confirme.`;st.style.color='#00B894';
+        renderImportResults();event.target.value='';return;
+      }
     }
 
     if(!extractedText.trim()){st.textContent='⚠ Não consegui extrair texto.';st.style.color='#FF9500';event.target.value='';return;}
