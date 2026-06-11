@@ -785,15 +785,17 @@ function renderDashboard(){
   const allMonths=[...new Set(entries.map(e=>gMK(e.date)))].sort();
   if(!allMonths.length){el.innerHTML='<div class="empty">Nenhum lançamento ainda.<br>Importe suas faturas para ver o dashboard.</div>';return;}
 
-  // KPIs últimos 30 dias vs 30 anteriores
+  // KPIs: usa o mês mais recente COM dados (não necessariamente mês atual)
   const today=new Date();
-  const d30=new Date(today);d30.setDate(d30.getDate()-30);
-  const d60=new Date(today);d60.setDate(d60.getDate()-60);
   const fmt=d=>d.toISOString().slice(0,10);
-  const last30=entries.filter(e=>e.date>=fmt(d30));
-  const prev30=entries.filter(e=>e.date>=fmt(d60)&&e.date<fmt(d30));
   const sumOut=arr=>arr.filter(e=>e.type==='saida').reduce((s,e)=>s+e.value,0);
   const sumIn=arr=>arr.filter(e=>e.type==='entrada').reduce((s,e)=>s+e.value,0);
+  // Encontra mês mais recente com pelo menos 5 lançamentos
+  const monthCounts=allMonths.map(m=>({m,n:entries.filter(e=>gMK(e.date)===m).length}));
+  const bestMonth=(monthCounts.filter(x=>x.n>=5).pop()||monthCounts[monthCounts.length-1])?.m||allMonths[allMonths.length-1];
+  const prevMonth=allMonths[allMonths.indexOf(bestMonth)-1]||bestMonth;
+  const last30=entries.filter(e=>gMK(e.date)===bestMonth);
+  const prev30=entries.filter(e=>gMK(e.date)===prevMonth);
   const out30=sumOut(last30),in30=sumIn(last30),outP=sumOut(prev30),inP=sumIn(prev30);
   const bal30=in30-out30;
   const diffPct=outP>0?Math.round((out30/outP-1)*100):0;
@@ -827,7 +829,7 @@ function renderDashboard(){
   el.innerHTML=`
   <div class="dash-kpis">
     <div class="kpi ${bal30>=0?'green':'red'}">
-      <div class="kpi-lbl">Saldo (30 dias)</div>
+      <div class="kpi-lbl">Saldo (${bestMonth.replace('-','/')})</div>
       <div class="kpi-val">${fBRL(Math.abs(bal30))}</div>
       <div class="kpi-sub">${bal30>=0?'▲ positivo':'▼ negativo'}</div>
     </div>
@@ -1518,11 +1520,13 @@ function parseBBFatura(text){
 
 function parseBBExtrato(text){
   const entries=[];
-  const IGNORAR=/BB Rende Fácil|Rende Facil|Saldo Anterior|S A L D O|Pagto cartão crédito|Pix - Rejeitado|Boleto devolvido|Pix-Envio devolvido|SISBB|Agência:|Data Movim\.|Informações adicionais/i;
+  const IGNORAR=/BB Rende Fácil|Rende Facil|Saldo Anterior|S A L D O|Pagto cartão crédito|Pagamento Fatura|Pix - Rejeitado|Boleto devolvido|Pix-Envio devolvido|SISBB|Agência:|Data Movim\.|Informações adicionais|Cobrança de Juros|Cobrança de I\.O\.F/i;
+  const IGNORAR_DESC=/^(\d{2}\/\d{2}\/\d{4}|Data Movim|Agência|SISBB|Rende Facil|Saldo)/i;
   const lines=text.split(/\n/);
-  // Extrato BB: data no formato DD/MM/YYYY, valor com C ou D no final
   const dateRe=/^(\d{2}\/\d{2}\/\d{4})/;
   const valRe=/([\d\.]+,\d{2})\s+(C|D)\s*$/;
+  // Pré-indexar datas por linha
+  const lineDates=lines.map(l=>{const m=dateRe.exec(l.trim());if(m){const[dd,mm,yy]=m[1].split('/');return `${yy}-${mm}-${dd}`;}return null;});
 
   let i=0;
   while(i<lines.length){
@@ -1533,21 +1537,28 @@ function parseBBExtrato(text){
       const val=parseFloat(vm[1].replace(/\./g,'').replace(',','.'));
       const cd=vm[2];
       if(val===0){i++;continue;}
-      // Buscar data e descrição nas linhas próximas
-      let date='';let desc='';
-      for(let j=Math.max(0,i-3);j<=i;j++){
-        const dm=dateRe.exec(lines[j]?.trim()||'');
-        if(dm){const[,d]=dm;const[dd,mm,yy]=d.split('/');date=`${yy}-${mm}-${dd}`;break;}
+      // Data: última data válida antes desta linha
+      let date='';
+      for(let j=i;j>=Math.max(0,i-8);j--){
+        if(lineDates[j]){date=lineDates[j];break;}
       }
-      // Descrição: linha atual antes do valor, ou linha anterior
-      const descLine=line.replace(valRe,'').trim();
-      const prevLine=(lines[i-1]||'').trim();
-      desc=descLine||prevLine;
-      desc=desc.replace(dateRe,'').trim();
+      // Descrição: varrer linhas anteriores para achar o tipo de transação
+      let desc='';
+      const descCandidates=[];
+      for(let j=Math.max(0,i-6);j<=i;j++){
+        const l=lines[j].trim();
+        if(!l||dateRe.test(l)||valRe.test(l))continue;
+        if(IGNORAR_DESC.test(l))continue;
+        // Remove timestamps DD/MM HH:MM e números de documento
+        const clean=l.replace(/\d{2}\/\d{2}\s+\d{2}:\d{2}/g,'').replace(/\d{5,}/g,'').trim();
+        if(clean.length>2)descCandidates.push(clean);
+      }
+      // Última linha não-vazia é geralmente a descrição mais específica
+      desc=descCandidates.slice(-2).join(' / ').slice(0,80).trim();
       if(!desc||IGNORAR.test(desc)){i++;continue;}
       const tipo=cd==='C'?'entrada':'saida';
       const cat=autoClassify(desc);
-      entries.push({data:date,desc:desc.slice(0,60),valor:val,tipo,...cat});
+      entries.push({data:date,desc:desc,valor:val,tipo,...cat});
     }
     i++;
   }
@@ -1614,7 +1625,29 @@ function autoClassify(desc){
   if(/escorudi/i.test(d))return{categoria:'🏡 Rancho',subcategoria:'Escorudi (escoras)'};
   if(/sodramar/i.test(d))return{categoria:'🏡 Rancho',subcategoria:'Manutenção'};
   if(/ana cristina|ana c\. silva/i.test(d))return{categoria:'🏡 Rancho',subcategoria:'Ana C. Silva (funcionária)'};
-  if(/cemig/i.test(d))return{categoria:'🧑‍💼 Serviços Profissionais',subcategoria:'Contas (Energia/Água/Telefone)'};
+  if(/cemig/i.test(d))return{categoria:'📋 Impostos & Taxas',subcategoria:'Energia (CEMIG)'};
+  if(/dmae/i.test(d))return{categoria:'📋 Impostos & Taxas',subcategoria:'Água (DMAE)'};
+  if(/bb consórcio|bb admin cons/i.test(d))return{categoria:'🎰 Consórcios',subcategoria:'BB Consórcio 1 (R$3.696)'};
+  if(/porto seguro cons/i.test(d))return{categoria:'🎰 Consórcios',subcategoria:'Porto Seguro Consórcio 1 (R$1.296)'};
+  if(/pagamento de consórcio|pagto cons/i.test(d))return{categoria:'🎰 Consórcios',subcategoria:'Consórcio'};
+  if(/llz|versa/i.test(d))return{categoria:'🏗️ Imóveis Carol & Manuel',subcategoria:'Financiamento Versa (LLZ)'};
+  if(/construtora pacheco|lebaru/i.test(d))return{categoria:'🏠 Casa Cyrela',subcategoria:'Obra/Construção'};
+  if(/pjbank/i.test(d))return{categoria:'🏢 Vila Fit',subcategoria:'Vila Fit'};
+  if(/cocal alimentos/i.test(d))return{categoria:'🏢 Vila Fit',subcategoria:'Insumos/Fornecedores'};
+  if(/wise brasil/i.test(d))return{categoria:'💱 Câmbio/Internacional',subcategoria:'Wise (câmbio)'};
+  if(/pagamento de boleto|pag boleto/i.test(d))return{categoria:'👤 Pessoal',subcategoria:'Boleto Avulso'};
+  if(/pagto energia|pagamento de energia/i.test(d))return{categoria:'📋 Impostos & Taxas',subcategoria:'Energia (CEMIG)'};
+  if(/pagamento de telefone/i.test(d))return{categoria:'📱 Assinaturas Digitais',subcategoria:'Outros Digitais'};
+  if(/impostos|secret.*fazenda/i.test(d))return{categoria:'📋 Impostos & Taxas',subcategoria:'Secretaria Fazenda MG'};
+  if(/compra com cartão|compra cartao/i.test(d))return{categoria:'👤 Pessoal',subcategoria:'Outros'};
+  if(/pix.*marketplace|marketplace/i.test(d))return{categoria:'🏢 Vila Fit',subcategoria:'Repasse Marketplace'};
+  if(/geane|inglês/i.test(d))return{categoria:'🎓 Educação',subcategoria:'Inglês (Geane)'};
+  if(/midori loterias/i.test(d))return{categoria:'✈️ Viagem & Lazer',subcategoria:'Loteria/Entretenimento'};
+  if(/raphael bessa|marcos freire|jose marcio|jean robson|washington goncalves|amauri franco|fabio da silva/i.test(d))return{categoria:'🏡 Rancho',subcategoria:'Funcionários/Serviços Rancho'};
+  if(/abmael rodrigues|yosen consumo/i.test(d))return{categoria:'🏢 Vila Fit',subcategoria:'Insumos/Fornecedores'};
+  if(/prospero comercio/i.test(d))return{categoria:'🏢 Vila Fit',subcategoria:'Insumos/Fornecedores'};
+  if(/vila fit/i.test(d))return{categoria:'🏢 Vila Fit',subcategoria:'Vila Fit'};
+  if(/maac/i.test(d))return{categoria:'🔄 Operações entre empresas',subcategoria:'MAAC'};
   return{categoria:'👤 Pessoal',subcategoria:'Outros'};
 }
 
