@@ -1999,17 +1999,18 @@ function futureInstallments(){
     // find the LATEST occurrence of this installment series
     const series=entries.filter(x=>x.type==='saida'&&recKey(x)===recKey(e)&&(x.note||'').match(new RegExp('/'+tot+'\\b')));
     let latest=series.sort((a,b)=>{
-      const ma=+(a.note.match(/parc\s*(\d+)/i)||[0,0])[1];
-      const mb=+(b.note.match(/parc\s*(\d+)/i)||[0,0])[1];
+      const ma=+((a.note||'').match(/parc\s*(\d+)/i)||[0,0])[1];
+      const mb=+((b.note||'').match(/parc\s*(\d+)/i)||[0,0])[1];
       return mb-ma;
     })[0];
-    const lm=+(latest.note.match(/parc\s*(\d+)/i)||[0,0])[1];
+    if(!latest)return;
+    const lm=+((latest.note||'').match(/parc\s*(\d+)/i)||[0,0])[1];
     const remaining=tot-lm;
     if(remaining<=0)return;
     const baseDate=new Date(gMK(latest.date)+'-15');
     for(let i=1;i<=remaining;i++){
       const fd=new Date(baseDate.getFullYear(),baseDate.getMonth()+i,15);
-      out.push({date:fd.toISOString().slice(0,10),value:latest.value,note:latest.note.replace(/parc\s*\d+\//i,'parc '+(lm+i)+'/'),category:latest.category});
+      out.push({date:fd.toISOString().slice(0,10),value:latest.value,note:(latest.note||'').replace(/parc\s*\d+\//i,'parc '+(lm+i)+'/'),category:latest.category});
     }
   });
   return out;
