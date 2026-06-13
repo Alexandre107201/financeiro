@@ -1489,10 +1489,14 @@ function parseBBFatura(text){
   const IGNORAR=/SALDO FATURA ANTERIOR|PGTO DEBITO CONTA|DEB AUTOM|DESC AUTOMATICO ANUD|Subtotal|Total da Fatura|Pagamentos\/Créditos|Lançamentos nesta fatura|Confira aqui|SISBB|Agência|Página \d/i;
   // Linha típica: "DD/MM DESCRIÇÃO [CIDADE] BR R$ VALOR" ou "DD/MM DESC PARC XX/YY CIDADE BR R$ VALOR"
   const lineRe=/(\d{2}\/\d{2})\s+(.+?)\s+(?:BR|US|AR|UY|PT)\s+R\$\s*([\d\.,]+)/g;
-  // Inferir ano da fatura a partir do texto
+  // Extrair data de vencimento e fechamento da fatura para âncora de ano
   let fatYear='2026';
-  const yMatch=text.match(/vencimento\s+\d{2}\/\d{2}\/(\d{4})|fechada em \d{2}\/\d{2}\/(\d{4})/i);
-  if(yMatch)fatYear=yMatch[1]||yMatch[2];
+  let fatMonth=5; // default maio
+  const vencMatch=text.match(/[Vv]encimento\D*(\d{2})\/(\d{2})\/(\d{4})/);
+  if(vencMatch){fatYear=vencMatch[3];fatMonth=parseInt(vencMatch[2]);}
+  else{const fechMatch=text.match(/fechada em (\d{2})\/(\d{2})\/(\d{4})/i);
+    if(fechMatch){fatYear=fechMatch[3];fatMonth=parseInt(fechMatch[2]);}}
+  const fatYearN=parseInt(fatYear);
 
   let m;
   while((m=lineRe.exec(text))!==null){
@@ -1500,17 +1504,13 @@ function parseBBFatura(text){
     if(IGNORAR.test(desc))continue;
     const val=parseFloat(valStr.replace(/\./g,'').replace(',','.'));
     if(isNaN(val)||val<=0)continue;
-    // valores negativos (créditos) — pular
     const context=text.slice(Math.max(0,m.index-5),m.index+5);
     if(context.includes('- R$')||context.includes('-R$'))continue;
     const [dd,mm2]=dateRaw.split('/');
-    // mês >= 10 provavelmente ano anterior se fatura é jan-abr
-    const baseMonth=parseInt(fatYear.slice(-2)||'26');
-    let year=fatYear;
     const mo=parseInt(mm2);
-    // Se mês da compra > mês de fechamento + 1, é ano anterior
-    const fatMonth=fatYear==='2026'?5:parseInt((text.match(/vencimento\s+\d{2}\/(\d{2})/i)||['','05'])[1]);
-    if(mo>fatMonth+1)year=String(parseInt(fatYear)-1);
+    // Se mês da compra é maior que mês do vencimento+1, é do ano anterior
+    let year=fatYearN;
+    if(mo>fatMonth+1)year=fatYearN-1;
     const date=`${year}-${mm2}-${dd}`;
     const cat=autoClassify(desc);
     entries.push({data:date,desc:desc.replace(/\s{2,}/g,' ').trim(),valor:val,tipo:'saida',...cat});
@@ -1520,7 +1520,7 @@ function parseBBFatura(text){
 
 function parseBBExtrato(text){
   const entries=[];
-  const IGNORAR=/BB Rende Fácil|Rende Facil|Saldo Anterior|S A L D O|Pagto cartão crédito|Pagamento Fatura|Pix - Rejeitado|Boleto devolvido|Pix-Envio devolvido|SISBB|Agência:|Data Movim\.|Informações adicionais|Cobrança de Juros|Cobrança de I\.O\.F/i;
+  const IGNORAR=/BB Rende Fácil|Rende Facil|Saldo Anterior|S A L D O|Pagto cartão crédito|Pagamento Fatura|Pix - Rejeitado|Boleto devolvido|Pix-Envio devolvido|SISBB|Agência:|Data Movim\.|Informações adicionais|Cobrança de Juros|Cobrança de I\.O\.F|MANUEL RAIMUNDO ALEXANDRE|MANUEL R A M N SILVA/i;
   const IGNORAR_DESC=/^(\d{2}\/\d{2}\/\d{4}|Data Movim|Agência|SISBB|Rende Facil|Saldo)/i;
   const lines=text.split(/\n/);
   const dateRe=/^(\d{2}\/\d{2}\/\d{4})/;
@@ -1566,6 +1566,9 @@ function parseBBExtrato(text){
 }
 
 function autoClassify(desc){
+  // 1. Consulta dicionário de aprendizado primeiro
+  const learned=lookupLearn(desc);
+  if(learned)return{categoria:learned.cat,subcategoria:learned.sub};
   const d=desc.toLowerCase();
   // Retorna {categoria, subcategoria}
   if(/abastec|posto (parque|moinho|ipiranga|bandei|trevo)|bahamas.*posto|rodoposto|rodosnack|d l itaim|dl itaim/i.test(d))return{categoria:'🐎 Mustang',subcategoria:'Gasolina'};
@@ -1868,16 +1871,61 @@ function clearAllData(){
   alert('✓ Todos os lançamentos foram removidos. Agora importe seus PDFs novamente.');
 }
 
+function normKey(e){
+  // Chave de deduplicação: data + valor + primeiras 20 letras da descrição normalizada
+  const desc=(e.note||e.desc||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,20);
+  return `${e.date||e.data}|${e.value||e.valor}|${desc}`;
+}
 function confirmImport(){
-  for(const it of importParsed){entries.unshift({id:Date.now()+Math.random(),date:it.data||today(),type:it.tipo||'saida',category:it.categoria,subcategory:it.subcategoria,value:Math.abs(it.valor),note:it.desc||''});}
+  // Construir set de chaves existentes
+  const existingKeys=new Set(entries.map(normKey));
+  let added=0,skipped=0;
+  for(const it of importParsed){
+    // Filtrar transferências internas antes de salvar
+    const desc=(it.desc||'').toLowerCase();
+    if(/pagto cartão|pagamento fatura|deb autom.*fat|pgto debito conta|bb rende fácil|rende facil|manuel raimundo alexandre|manuel r a m n silva/.test(desc)){skipped++;continue;}
+    const entry={id:Date.now()+Math.random(),date:it.data||today(),type:it.tipo||'saida',category:it.categoria,subcategory:it.subcategoria,value:Math.abs(it.valor),note:it.desc||''};
+    const key=normKey(entry);
+    if(existingKeys.has(key)){skipped++;continue;}
+    existingKeys.add(key);
+    entries.unshift(entry);
+    // Salvar no dicionário de aprendizado
+    learnCategory(it.desc||'',it.categoria,it.subcategoria);
+    added++;
+  }
   ssv('fm_e',entries);
-  const n=importParsed.length;importParsed=[];
+  importParsed=[];
   document.getElementById('imp-results').innerHTML='';
   const st=document.getElementById('imp-st');
-  st.textContent=`✓ ${n} lançamentos importados!`;st.style.color='#00B894';
+  st.textContent=`✓ ${added} importados, ${skipped} ignorados (duplicatas/internos).`;st.style.color='#00B894';
   updateExpBtn();
 }
 function cancelImport(){importParsed=[];document.getElementById('imp-results').innerHTML='';document.getElementById('imp-st').textContent='Cancelado.';}
+
+// ===== DICIONÁRIO DE APRENDIZADO =====
+let learnDict={};
+function loadLearnDict(){try{learnDict=JSON.parse(localStorage.getItem('fm_learn')||'{}');}catch(e){learnDict={};}}
+function saveLearnDict(){try{localStorage.setItem('fm_learn',JSON.stringify(learnDict));}catch(e){}}
+function learnCategory(desc,cat,sub){
+  if(!desc||!cat||!sub)return;
+  const key=desc.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,30);
+  if(!key)return;
+  learnDict[key]={cat,sub};
+  saveLearnDict();
+}
+function lookupLearn(desc){
+  const key=(desc||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,30);
+  return learnDict[key]||null;
+}
+// Interceptar correções manuais no Histórico para aprender
+function onManualCategoryChange(entryId,newCat,newSub){
+  const e=entries.find(x=>x.id===entryId);
+  if(!e)return;
+  e.category=newCat;e.subcategory=newSub;
+  learnCategory(e.note,newCat,newSub);
+  ssv('fm_e',entries);
+}
+loadLearnDict();
 
 init();
 </script>
