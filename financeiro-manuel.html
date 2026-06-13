@@ -953,8 +953,8 @@ function renderDashConsolidado(el,allMonths,sumOut,sumIn){
     });
     dashCharts.push(tc);
   }
-  if(typeof Chart!=='undefined')setTimeout(doConsolCharts,80);
-  else{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js';s.onload=()=>setTimeout(doConsolCharts,80);document.head.appendChild(s);}
+  if(typeof Chart!=='undefined')doConsolCharts();
+  else{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js';s.onload=doConsolCharts;document.head.appendChild(s);}
 }
 
 function renderDashboard(){
@@ -994,23 +994,22 @@ function renderDashboard(){
   const mOut=allMonths.slice(-6).map(m=>entries.filter(e=>gMK(e.date)===m&&e.type==='saida').reduce((s,e)=>s+e.value,0));
   const mIn=allMonths.slice(-6).map(m=>entries.filter(e=>gMK(e.date)===m&&e.type==='entrada').reduce((s,e)=>s+e.value,0));
 
-  // Category breakdown — usa fMonth selecionado
-  const curEntries=entries.filter(e=>gMK(e.date)===bestMonth&&e.type==='saida');
+  // Category breakdown current month
+  const curM=allMonths[allMonths.length-1];
+  const curEntries=entries.filter(e=>gMK(e.date)===curM&&e.type==='saida');
   const byCat={};
   curEntries.forEach(e=>{byCat[e.category]=(byCat[e.category]||0)+e.value;});
   const topCats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const pieColors=['#6C5CE7','#00B894','#E17055','#00CEC9','#FDCB6E','#74B9FF','#FD79A8','#FF7675'];
 
-  // Weekly spending — semanas do mês selecionado
-  const [bY,bMo]=bestMonth.split('-');
-  const bDate=new Date(parseInt(bY),parseInt(bMo)-1,1);
+  // Weekly spending last 8 weeks
   const weeks=[];
-  for(let i=0;i<4;i++){
-    const wStart=new Date(bDate.getFullYear(),bDate.getMonth(),1+i*7);
-    const wEnd=new Date(bDate.getFullYear(),bDate.getMonth(),Math.min(7+i*7,31));
+  for(let i=7;i>=0;i--){
+    const wEnd=new Date(today);wEnd.setDate(wEnd.getDate()-i*7);
+    const wStart=new Date(wEnd);wStart.setDate(wStart.getDate()-6);
     const wS=fmt(wStart),wE=fmt(wEnd);
     const wOut=entries.filter(e=>e.date>=wS&&e.date<=wE&&e.type==='saida').reduce((s,e)=>s+e.value,0);
-    weeks.push({label:'S'+(i+1),val:wOut});
+    weeks.push({label:'S'+(8-i),val:wOut});
   }
 
   const diffSign=diffPct>=0?'+':'';
@@ -1031,7 +1030,7 @@ function renderDashboard(){
     <div class="kpi green">
       <div class="kpi-lbl">Entradas (30 dias)</div>
       <div class="kpi-val">${fBRL(in30)}</div>
-      <div class="kpi-sub">${entries.filter(e=>gMK(e.date)===bestMonth&&e.type==='entrada').length} recebimentos</div>
+      <div class="kpi-sub">${entries.filter(e=>e.date>=fmt(d30)&&e.type==='entrada').length} recebimentos</div>
     </div>
     <div class="kpi yellow">
       <div class="kpi-lbl">Lançamentos total</div>
@@ -1050,7 +1049,7 @@ function renderDashboard(){
   </div>
 
   <div class="chart-section">
-    <div class="chart-section-title">Gastos por categoria — ${MONTHS[parseInt(bestMonth.split('-')[1])-1]}/${bestMonth.split('-')[0].slice(2)}</div>
+    <div class="chart-section-title">Gastos por categoria — mês atual (${mLabels[mLabels.length-1]||''})</div>
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <div class="chart-container" style="height:180px;width:180px;flex-shrink:0"><canvas id="dc-pie" role="img" aria-label="Distribuição de gastos por categoria"></canvas></div>
       <div style="flex:1;min-width:120px">
@@ -2405,6 +2404,139 @@ function drawSankey(mk){
   });
 }
 
+// ---------- DASHBOARD MONTH/CONSOLIDATED FIX ----------
+function dashDataMonthsFixed(){
+  return [...new Set(entries.map(e=>gMK(e.date)).filter(Boolean))].sort();
+}
+function dashEnsureMonthFixed(){
+  const months=dashDataMonthsFixed();
+  if(months.length&&!months.includes(fMonth))fMonth=months[months.length-1];
+  if(!fMonth)fMonth=today().slice(0,7);
+  return fMonth;
+}
+function dashPrevMonthFixed(mk){
+  const months=dashDataMonthsFixed();
+  const idx=months.indexOf(mk);
+  return idx>0?months[idx-1]:null;
+}
+function dashWindowMonthsFixed(mk,n){
+  const months=dashDataMonthsFixed();
+  let out=months.filter(m=>m<=mk).slice(-n);
+  if(!out.includes(mk))out=[...out,mk].sort().slice(-n);
+  return out;
+}
+function renderDashboardConsolidadoFixed(el){
+  const months=dashDataMonthsFixed();
+  if(!months.length){el.innerHTML='<div class="empty">Nenhum lancamento ainda.<br>Importe suas faturas para ver o dashboard.</div>';return;}
+  const totalOut=entries.filter(e=>e.type==='saida').reduce((a,b)=>a+b.value,0);
+  const totalIn=entries.filter(e=>e.type==='entrada').reduce((a,b)=>a+b.value,0);
+  const balance=totalIn-totalOut;
+  const avgOut=totalOut/months.length;
+  const avgIn=totalIn/months.length;
+  const byMonth=months.map(m=>({m,out:sumMonth(m,'saida'),inc:sumMonth(m,'entrada')}));
+  const maxMonth=Math.max(...byMonth.map(x=>Math.max(x.out,x.inc)),1);
+  const byCat={};
+  entries.filter(e=>e.type==='saida').forEach(e=>{byCat[e.category]=(byCat[e.category]||0)+e.value;});
+  const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+  const maxCat=Math.max(...cats.map(([,v])=>v),1);
+  let html=`<div class="kpi-grid">
+    <div class="kpi"><div class="kpi-lbl">Saidas consolidadas</div><div class="kpi-val" style="color:#FF4757">${fBRL(totalOut)}</div><div class="kpi-trend neutral">Media ${fBRL(avgOut)}/mes</div></div>
+    <div class="kpi"><div class="kpi-lbl">Entradas consolidadas</div><div class="kpi-val" style="color:#2ED573">${fBRL(totalIn)}</div><div class="kpi-trend neutral">Media ${fBRL(avgIn)}/mes</div></div>
+    <div class="kpi"><div class="kpi-lbl">Saldo do periodo</div><div class="kpi-val" style="color:${balance>=0?'#2ED573':'#FF4757'}">${balance>=0?'+':''}${fBRL(balance)}</div><div class="kpi-trend neutral">${months.length} meses somados</div></div>
+    <div class="kpi"><div class="kpi-lbl">Lancamentos</div><div class="kpi-val" style="color:#6C5CE7">${entries.length}</div><div class="kpi-trend neutral">${months[0]} a ${months[months.length-1]}</div></div>
+  </div>`;
+  html+=`<div class="chart-card"><div class="sec-t" style="margin-top:0">Evolucao consolidada por mes</div>`;
+  byMonth.forEach(x=>{
+    html+=`<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#888;margin-bottom:4px"><span>${x.m}</span><span>Entradas ${fBRL(x.inc)} | Saidas ${fBRL(x.out)}</span></div>
+      <div class="bud-bar" style="height:14px;display:flex"><div style="width:${Math.round(x.inc/maxMonth*100)}%;background:#2ED573"></div><div style="width:${Math.round(x.out/maxMonth*100)}%;background:#FF4757"></div></div>
+    </div>`;
+  });
+  html+=`</div><div class="chart-card"><div class="sec-t" style="margin-top:0">Gastos por categoria - periodo completo</div>`;
+  cats.slice(0,20).forEach(([cat,val])=>{
+    html+=`<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cat}</span><span>${fBRL(val)}</span></div>
+      <div class="bud-bar"><div class="bud-fill" style="width:${Math.round(val/maxCat*100)}%;background:#6C5CE7"></div></div>
+      <div style="font-size:10px;color:#aaa;text-align:right">${totalOut?Math.round(val/totalOut*100):0}% das saidas</div>
+    </div>`;
+  });
+  html+=`</div>`;
+  el.innerHTML=html;
+}
+renderDashboard=function(){
+  const el=document.getElementById('dash-content');
+  const dataMonths=dashDataMonthsFixed();
+  if(!dataMonths.length){el.innerHTML='<div class="empty">Nenhum lancamento ainda.<br>Importe suas faturas para ver o dashboard.</div>';return;}
+  const mk=dashEnsureMonthFixed();
+  updateMonthNav('dashboard');
+  if(dashMode==='consol'){renderDashboardConsolidadoFixed(el);return;}
+  const prevMk=dashPrevMonthFixed(mk);
+  const months=dashWindowMonthsFixed(mk,6);
+  const out=sumMonth(mk,'saida'),inc=sumMonth(mk,'entrada');
+  const outPrev=prevMk?sumMonth(prevMk,'saida'):0,incPrev=prevMk?sumMonth(prevMk,'entrada'):0;
+  const recs=detectRecurrences();
+  const committed=recs.reduce((a,r)=>a+r.avg,0);
+  const futParc=futureInstallments();
+  const futThisMonth=futParc.filter(f=>gMK(f.date)===mk).reduce((a,b)=>a+b.value,0);
+  const fixedSpent=entries.filter(e=>e.type==='saida'&&gMK(e.date)===mk&&recs.some(r=>recKey(e)===r.key)).reduce((a,b)=>a+b.value,0);
+  const variableSpent=Math.max(0,out-fixedSpent);
+  const dOut=outPrev?((out-outPrev)/outPrev*100):0;
+  const dInc=incPrev?((inc-incPrev)/incPrev*100):0;
+  const outSeries=months.map(m=>sumMonth(m,'saida'));
+  const incSeries=months.map(m=>sumMonth(m,'entrada'));
+
+  let html=`<div class="kpi-grid">
+    <div class="kpi"><div class="kpi-lbl">Saidas em ${mk}</div><div class="kpi-val" style="color:#FF4757">${fmtK(out)}</div>
+      <div class="kpi-trend ${dOut>2?'up':dOut<-2?'down':'neutral'}">${dOut>0?'↑':dOut<0?'↓':'→'} ${Math.abs(dOut).toFixed(0)}% vs ${prevMk||'mes ant.'}</div>
+      <canvas width="80" height="30" id="sp-out"></canvas></div>
+    <div class="kpi"><div class="kpi-lbl">Entradas em ${mk}</div><div class="kpi-val" style="color:#2ED573">${fmtK(inc)}</div>
+      <div class="kpi-trend ${dInc<-2?'up':dInc>2?'down':'neutral'}">${dInc>0?'↑':dInc<0?'↓':'→'} ${Math.abs(dInc).toFixed(0)}% vs ${prevMk||'mes ant.'}</div>
+      <canvas width="80" height="30" id="sp-inc"></canvas></div>
+    <div class="kpi"><div class="kpi-lbl">Comprometido fixo/mes</div><div class="kpi-val" style="color:#E17055">${fmtK(committed)}</div>
+      <div class="kpi-trend neutral">${recs.length} recorrencias detectadas</div></div>
+    <div class="kpi"><div class="kpi-lbl">Parcelas futuras</div><div class="kpi-val" style="color:#6C5CE7">${fmtK(futParc.reduce((a,b)=>a+b.value,0))}</div>
+      <div class="kpi-trend neutral">${fBRL(futThisMonth)} ainda neste mes</div></div>
+  </div>`;
+
+  const fixPct=out?Math.min(100,fixedSpent/out*100):0;
+  html+=`<div class="chart-card"><div class="sec-t" style="margin-top:0">Fixo vs variavel (${mk})</div>
+    <div class="bud-bar" style="height:14px;display:flex;overflow:hidden">
+      <div style="width:${fixPct}%;background:#E17055"></div>
+      <div style="width:${100-fixPct}%;background:#FDCB6E"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:#888;margin-top:6px">
+      <span>Fixo: ${fBRL(fixedSpent)}</span><span>Variavel: ${fBRL(variableSpent)}</span>
+    </div></div>`;
+
+  html+=`<div class="chart-card"><div class="sec-t" style="margin-top:0">Fluxo do dinheiro (${mk})</div><canvas id="sankey" width="700" height="320" style="width:100%;height:auto"></canvas></div>`;
+
+  const catTotals={};
+  entries.filter(e=>e.type==='saida'&&(gMK(e.date)===mk||(prevMk&&gMK(e.date)===prevMk))).forEach(e=>{
+    if(!catTotals[e.category])catTotals[e.category]={cur:0,prev:0};
+    if(gMK(e.date)===mk)catTotals[e.category].cur+=e.value;else catTotals[e.category].prev+=e.value;
+  });
+  const momRows=Object.entries(catTotals).filter(([,v])=>v.cur>0||v.prev>0).sort((a,b)=>b[1].cur-a[1].cur).slice(0,12);
+  html+=`<div class="chart-card"><div class="sec-t" style="margin-top:0">Comparativo vs ${prevMk||'mes anterior'}</div>`;
+  momRows.forEach(([cat,v])=>{
+    const d=v.prev?((v.cur-v.prev)/v.prev*100):(v.cur>0?100:0);
+    const col=d>5?'#FF4757':d<-5?'#2ED573':'#aaa';
+    html+=`<div class="mom-row"><span class="mom-cat">${cat}</span><span style="font-size:11px;color:#888">${fmtK(v.cur)}</span><span class="mom-delta" style="color:${col}">${d>0?'+':''}${d.toFixed(0)}%</span></div>`;
+  });
+  html+=`</div>`;
+
+  html+=`<div class="chart-card"><div class="sec-t" style="margin-top:0">Recorrencias detectadas</div>`;
+  recs.slice(0,15).forEach(r=>{
+    html+=`<div class="rec-row"><div><div>${r.note.slice(0,38)}</div><div class="rec-meta">${r.cat} - ${r.freq}x nos ultimos meses</div></div><div style="font-weight:600">${fBRL(r.avg)}/mes</div></div>`;
+  });
+  if(!recs.length)html+=`<div class="empty">Lance pelo menos 2 meses de dados para detectar recorrencias</div>`;
+  html+=`</div>`;
+
+  el.innerHTML=html;
+  spark(document.getElementById('sp-out'),outSeries,'#FF4757');
+  spark(document.getElementById('sp-inc'),incSeries,'#2ED573');
+  drawSankey(mk);
+};
+
 // ---------- CASH FLOW FORECAST v19 ----------
 const _origForecast=renderForecast;
 renderForecast=function(){
@@ -2484,7 +2616,7 @@ function drawCashflow(proj){
 // ---------- BUDGET ----------
 function renderBudget(){
   const el=document.getElementById('budget-content');
-  const mk=today().slice(0,7);
+  const mk=fMonth||today().slice(0,7);
   let html='';
   Object.keys(cats).forEach(cat=>{
     const spent=catMonth(mk,cat);
