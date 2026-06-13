@@ -819,6 +819,9 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
     <div style="display:flex;flex-direction:column;gap:8px">
       <button class="btn btn-ghost" onclick="App.exportCSV()" style="width:100%">⬇ Exportar CSV</button>
       <button class="btn btn-ghost" onclick="App.exportJSON()" style="width:100%">⬇ Exportar JSON (backup)</button>
+      <button class="btn btn-ghost" style="width:100%" onclick="App.runFixConsorciosBtn()">🔧 Corrigir consórcios por valor</button>
+      <button class="btn btn-ghost" style="width:100%" onclick="App.runFixCemigBtn()">⚡ Corrigir CEMIG por descrição</button>
+      <button class="btn btn-ghost" style="width:100%" onclick="App.runRemoveDupBtn()">🧹 Remover duplicatas</button>
       <button class="btn" style="background:#FF4757;color:#fff;width:100%" onclick="App.confirmClearAll()">🗑 Apagar todos os lançamentos</button>
     </div>
     <div style="margin-top:14px;font-size:11px;color:var(--text3);text-align:center" id="cfg-stats"></div>
@@ -1236,6 +1239,8 @@ const Classifier = {
     [/iof/i,            '📋 Impostos & Taxas', 'IOF'],
     [/anuidade/i,       '📋 Impostos & Taxas', 'Anuidade Cartão Santander'],
     [/tarifa pacote/i,  '📋 Impostos & Taxas', 'Tarifa Pacote BB'],
+    [/conta agua e esgoto casa m[aA]e|agua e esgoto.*mae/i, '👩‍👧 Casa Mãe Norma', 'CEMIG Casa Mãe'],
+    [/pagto energia el[eé]trica cemig/i, '🏘️ Casa Varanda Sul', 'CEMIG Varanda Sul'],
     [/cemig/i,          '📋 Impostos & Taxas', 'Energia (CEMIG)'],
     [/dmae/i,           '📋 Impostos & Taxas', 'Água (DMAE)'],
     [/airbnb/i,         '➕ Receitas', 'Airbnb (Universitá)'],
@@ -1250,17 +1255,51 @@ const Classifier = {
     [/raphael bessa|marcos freire|jose marcio|jean robson|washington goncalves|amauri franco|fabio da silva/i, '🏡 Rancho', 'Outros Rancho'],
   ],
 
-  classify(desc) {
+  // Mapa de consórcios por valor exato (tolerância R$5)
+  CONSORCIO_BY_VALUE: [
+    { valor: 3358.19, sub: 'Porto Seguro Consórcio 3 (R$3.360)' },
+    { valor: 3359.17, sub: 'Porto Seguro Consórcio 3 (R$3.360)' },
+    { valor: 2252.54, sub: 'Santander Consórcio (R$1.360)' },
+    { valor: 2211.93, sub: 'Porto Seguro Consórcio 3 (R$3.360)' },
+    { valor: 2212.59, sub: 'Porto Seguro Consórcio 3 (R$3.360)' },
+    { valor: 1360.70, sub: 'Santander Consórcio (R$1.360)' },
+    { valor: 1295.96, sub: 'Porto Seguro Consórcio 2 (R$2.213)' },
+    { valor: 1296.35, sub: 'Porto Seguro Consórcio 2 (R$2.213)' },
+    { valor: 777.03,  sub: 'Porto Seguro Consórcio 1 (R$1.296)' },
+    { valor: 683.43,  sub: 'BB Consórcio 2 (R$639)' },
+    { valor: 652.81,  sub: 'BB Consórcio 1 (R$3.696)' },
+    { valor: 639.80,  sub: 'BB Consórcio 2 (R$639)' },
+    { valor: 611.13,  sub: 'BB Consórcio 4 (R$611)' },
+  ],
+  CONSORCIO_TOL: 5,
+
+  classifyConsorcio(valor) {
+    for (const c of this.CONSORCIO_BY_VALUE) {
+      if (Math.abs(valor - c.valor) <= this.CONSORCIO_TOL) {
+        return { categoria: '🎰 Consórcios', subcategoria: c.sub };
+      }
+    }
+    return null;
+  },
+
+  classify(desc, valor = 0) {
     // 1. learned dict
     const learned = Data.lookupLearn(desc);
     if (learned) return { categoria: learned.cat, subcategoria: learned.sub };
 
     const d = desc.toLowerCase();
-    // 2. rule-based
+
+    // 2. Consórcio: identificar pelo valor quando descrição é genérica
+    if (/cons.rcio|consorcio/i.test(d) && valor > 0) {
+      const byVal = this.classifyConsorcio(valor);
+      if (byVal) return byVal;
+    }
+
+    // 3. rule-based
     for (const [re, cat, sub] of this.rules) {
       if (re.test(d)) return { categoria: cat, subcategoria: sub };
     }
-    // 3. fallback
+    // 4. fallback
     return { categoria: '👤 Pessoal', subcategoria: 'Outros Pessoal' };
   },
 };
@@ -1315,7 +1354,7 @@ const Parsers = {
         date = `${yr}-${mm2}-${dd}`;
       }
       const cleanDesc = desc.replace(/\s{2,}/g, ' ').trim();
-      out.push({ data: date, desc: cleanDesc, valor: val, tipo: 'saida', ...Classifier.classify(cleanDesc) });
+      out.push({ data: date, desc: cleanDesc, valor: val, tipo: 'saida', ...Classifier.classify(cleanDesc, val) });
     }
     return out.length ? out : null;
   },
@@ -1355,7 +1394,7 @@ const Parsers = {
       }
       const desc = cands.slice(-2).join(' / ').slice(0, 80).trim();
       if (!desc || SKIP.test(desc)) continue;
-      out.push({ data: date, desc, valor: val, tipo, ...Classifier.classify(desc) });
+      out.push({ data: date, desc, valor: val, tipo, ...Classifier.classify(desc, val) });
     }
     return out.length ? out : null;
   },
@@ -2502,6 +2541,79 @@ const App = {
       status.style.color = 'var(--red)';
     }
     event.target.value = '';
+  },
+
+  // ---- CORRIGIR CONSÓRCIOS EM LOTE ----
+  fixCemigEmLote() {
+    // Corrige classificação de CEMIG pelo texto da descrição
+    let fixed = 0;
+    Data.entries.forEach(e => {
+      const desc = (e.note || '').toLowerCase();
+      if (!/cemig|energia eletrica|agua e esgoto/.test(desc)) return;
+      let cat = null, sub = null;
+      if (/conta agua e esgoto casa m[aA]e|agua e esgoto.*mae/.test(e.note || '')) {
+        cat = '👩‍👧 Casa Mãe Norma'; sub = 'CEMIG Casa Mãe';
+      } else if (/pagto energia el[eé]trica cemig/i.test(e.note || '')) {
+        cat = '🏘️ Casa Varanda Sul'; sub = 'CEMIG Varanda Sul';
+      } else {
+        cat = '📋 Impostos & Taxas'; sub = 'Energia (CEMIG)';
+      }
+      if (e.category !== cat || e.subcategory !== sub) {
+        e.category = cat; e.subcategory = sub; fixed++;
+      }
+    });
+    Data.saveEntries();
+    return fixed;
+  },
+
+  removeDuplicates() {
+    // Remove entradas duplicadas (mesma data + valor + primeiros 20 chars da nota)
+    const seen = new Set();
+    const before = Data.entries.length;
+    Data.entries = Data.entries.filter(e => {
+      const key = `${e.date}|${Math.round(e.value*100)}|${(e.note||'').slice(0,20).toLowerCase().replace(/\s+/g,'')}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const removed = before - Data.entries.length;
+    Data.saveEntries();
+    return removed;
+  },
+
+  fixConsorciosEmLote() {
+    let fixed = 0;
+    Data.entries.forEach(e => {
+      const isCons = /cons.rcio|consorcio/i.test((e.note || '').toLowerCase())
+                  || e.category === '🎰 Consórcios';
+      if (!isCons || e.value <= 0) return;
+      const result = Classifier.classifyConsorcio(e.value);
+      if (result) {
+        e.category    = result.categoria;
+        e.subcategory = result.subcategoria;
+        fixed++;
+      }
+    });
+    Data.saveEntries();
+    return fixed;
+  },
+
+  runFixConsorciosBtn() {
+    const n = this.fixConsorciosEmLote();
+    alert(`✓ ${n} lançamentos de consórcio corrigidos por valor.`);
+    this.renderView(State.curView);
+  },
+
+  runFixCemigBtn() {
+    const n = this.fixCemigEmLote();
+    alert(`✓ ${n} lançamentos de CEMIG corrigidos.`);
+    this.renderView(State.curView);
+  },
+
+  runRemoveDupBtn() {
+    const n = this.removeDuplicates();
+    alert(`✓ ${n} duplicatas removidas.`);
+    this.renderView(State.curView);
   },
 
   // ---- BUDGET ----
