@@ -63,6 +63,22 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .chip.g-viagem.on{background:#FD79A8}
 .chip.g-invest.on{background:#00B894}
 .chip.g-receita.on{background:#2ED573;color:#000}
+.month-nav{display:flex;align-items:center;justify-content:space-between;background:#fff;border:1.5px solid #E8E6E0;border-radius:14px;padding:10px 16px;margin-bottom:16px}
+.month-nav-label{font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#1A1A22;text-align:center;flex:1}
+.month-nav-sub{font-size:10px;color:#aaa;font-weight:400;display:block;margin-top:1px}
+.month-nav-btn{width:36px;height:36px;border-radius:50%;border:1.5px solid #E8E6E0;background:#F8F8F6;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+.month-nav-btn:hover{background:#1A1A22;color:#fff;border-color:#1A1A22}
+.month-nav-btn:disabled{opacity:.25;cursor:default}
+.dash-mode-toggle{display:flex;gap:6px;margin-bottom:16px;background:#F8F8F6;border-radius:12px;padding:4px}
+.dash-mode-btn{flex:1;padding:8px;border:none;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:#888;transition:all .2s}
+.dash-mode-btn.on{background:#fff;color:#1A1A22;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.sum-bar-wrap{height:6px;background:#F0F0EE;border-radius:3px;margin-top:6px;margin-bottom:2px;overflow:hidden}
+.sum-bar-fill{height:100%;border-radius:3px;transition:width .4s}
+.sum-pct{font-size:10px;color:#aaa;text-align:right}
+.consol-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.consol-card{background:#fff;border:1.5px solid #E8E6E0;border-radius:14px;padding:14px}
+.consol-lbl{font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.consol-val{font-family:'Syne',sans-serif;font-weight:800;font-size:18px}
 
 /* SUB CHIPS */
 .sub-chip{padding:8px 12px;border:1.5px solid #E8E6E0;border-radius:18px;cursor:pointer;background:#F8F8F6;color:#888;font-size:11px;white-space:nowrap;transition:all .2s}
@@ -332,13 +348,21 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <!-- LIST VIEW -->
 <div id="view-list" class="view">
   <input id="search-inp" class="inp" type="text" placeholder="🔍 Buscar por descrição, valor, categoria..." oninput="renderList()" style="margin-bottom:12px">
-  <div id="lm" class="mf"></div>
+  <div id="lm-nav" class="month-nav">
+    <button class="month-nav-btn" id="lm-prev" onclick="navMonth('list',-1)">‹</button>
+    <div class="month-nav-label"><span id="lm-label">—</span><span class="month-nav-sub" id="lm-count"></span></div>
+    <button class="month-nav-btn" id="lm-next" onclick="navMonth('list',1)">›</button>
+  </div>
   <div id="list-entries"></div>
 </div>
 
 <!-- SUMMARY VIEW -->
 <div id="view-summary" class="view">
-  <div id="sm" class="mf"></div>
+  <div id="sm-nav" class="month-nav">
+    <button class="month-nav-btn" id="sm-prev" onclick="navMonth('summary',-1)">‹</button>
+    <div class="month-nav-label"><span id="sm-label">—</span><span class="month-nav-sub" id="sm-count"></span></div>
+    <button class="month-nav-btn" id="sm-next" onclick="navMonth('summary',1)">›</button>
+  </div>
   <div class="sum-grid">
     <div class="sum-card"><div class="sum-lbl">Entradas</div><div id="si" class="sum-val" style="color:#2ED573"></div></div>
     <div class="sum-card"><div class="sum-lbl">Saídas</div><div id="so" class="sum-val" style="color:#FF4757"></div></div>
@@ -349,6 +373,15 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 
 <!-- DASHBOARD VIEW -->
 <div id="view-dashboard" class="view">
+  <div class="dash-mode-toggle">
+    <button class="dash-mode-btn on" id="dm-mes" onclick="setDashMode('mes')">📅 Mês</button>
+    <button class="dash-mode-btn" id="dm-consol" onclick="setDashMode('consol')">📊 Consolidado</button>
+  </div>
+  <div id="dash-month-nav" class="month-nav">
+    <button class="month-nav-btn" id="dm-prev" onclick="navMonth('dashboard',-1)">‹</button>
+    <div class="month-nav-label"><span id="dm-label">—</span><span class="month-nav-sub" id="dm-count"></span></div>
+    <button class="month-nav-btn" id="dm-next" onclick="navMonth('dashboard',1)">›</button>
+  </div>
   <div id="dash-content"></div>
 </div>
 
@@ -611,17 +644,62 @@ function getAllMonths(){
   return a;
 }
 
-function renderMF(id){
-  document.getElementById(id).innerHTML=getAllMonths().map(m=>{
-    const[y,mo]=m.split('-');
-    return `<button class="mbtn${m===fMonth?' on':''}" onclick="setFM('${m}')">${MONTHS[parseInt(mo)-1]}/${y.slice(2)}</button>`;
-  }).join('');
+let dashMode='mes';
+function setDashMode(m){
+  dashMode=m;
+  document.getElementById('dm-mes').classList.toggle('on',m==='mes');
+  document.getElementById('dm-consol').classList.toggle('on',m==='consol');
+  document.getElementById('dash-month-nav').style.display=m==='mes'?'flex':'none';
+  renderDashboard();
 }
 
-function setFM(m){fMonth=m;if(curView==='list')renderList();if(curView==='summary')renderSummary();if(curView==='analytics')renderAnalytics();}
+function updateMonthNav(view){
+  const months=getAllMonths().slice().reverse(); // oldest to newest
+  const idx=months.indexOf(fMonth);
+  const [y,mo]=fMonth.split('-');
+  const lbl=MONTHS[parseInt(mo)-1]+' '+y;
+  const cnt=entries.filter(e=>gMK(e.date)===fMonth).length;
+  if(view==='list'||view==='all'){
+    const el=document.getElementById('lm-label');if(el)el.textContent=lbl;
+    const ec=document.getElementById('lm-count');if(ec)ec.textContent=cnt+' lançamentos';
+    const pb=document.getElementById('lm-prev');if(pb)pb.disabled=idx<=0;
+    const nb=document.getElementById('lm-next');if(nb)nb.disabled=idx>=months.length-1;
+  }
+  if(view==='summary'||view==='all'){
+    const el=document.getElementById('sm-label');if(el)el.textContent=lbl;
+    const ec=document.getElementById('sm-count');if(ec)ec.textContent=cnt+' lançamentos';
+    const pb=document.getElementById('sm-prev');if(pb)pb.disabled=idx<=0;
+    const nb=document.getElementById('sm-next');if(nb)nb.disabled=idx>=months.length-1;
+  }
+  if(view==='dashboard'||view==='all'){
+    const el=document.getElementById('dm-label');if(el)el.textContent=lbl;
+    const ec=document.getElementById('dm-count');if(ec)ec.textContent=cnt+' lançamentos';
+    const pb=document.getElementById('dm-prev');if(pb)pb.disabled=idx<=0;
+    const nb=document.getElementById('dm-next');if(nb)nb.disabled=idx>=months.length-1;
+  }
+  if(view==='analytics'||view==='all'){
+    const el=document.getElementById('am-label');if(el)el.textContent=lbl;
+  }
+}
+
+function navMonth(view,dir){
+  const months=getAllMonths().slice().reverse();
+  const idx=months.indexOf(fMonth);
+  const newIdx=idx+dir;
+  if(newIdx<0||newIdx>=months.length)return;
+  fMonth=months[newIdx];
+  updateMonthNav('all');
+  if(view==='list')renderList();
+  if(view==='summary')renderSummary();
+  if(view==='analytics')renderAnalytics();
+  if(view==='dashboard')renderDashboard();
+}
+
+function renderMF(id){/* legacy no-op — replaced by month-nav */}
+function setFM(m){fMonth=m;updateMonthNav('all');if(curView==='list')renderList();if(curView==='summary')renderSummary();if(curView==='analytics')renderAnalytics();}
 
 function renderList(){
-  renderMF('lm');
+  updateMonthNav('list');
   const me=entries.filter(e=>gMK(e.date)===fMonth);
   const el=document.getElementById('list-entries');
   if(!me.length){el.innerHTML='<div class="empty">Nenhum lançamento neste mês</div>';return;}
@@ -643,7 +721,7 @@ function renderList(){
 }
 
 function renderSummary(){
-  renderMF('sm');
+  updateMonthNav('summary');
   const me=entries.filter(e=>gMK(e.date)===fMonth);
   const tIn=me.filter(e=>e.type==='entrada').reduce((s,e)=>s+e.value,0);
   const tOut=me.filter(e=>e.type==='saida').reduce((s,e)=>s+e.value,0);
@@ -673,7 +751,7 @@ function toggleSum(cat){expSum=expSum===cat?null:cat;renderSummary();}
 
 // ===== ANALYTICS =====
 function renderAnalytics(){
-  renderMF('am');
+  updateMonthNav('analytics');
   const me=entries.filter(e=>gMK(e.date)===fMonth);
   const prevMonth=getAllMonths()[1];
   const prev=prevMonth?entries.filter(e=>gMK(e.date)===prevMonth):[];
@@ -779,26 +857,97 @@ function renderAnalytics(){
 let dashCharts=[];
 function destroyDashCharts(){dashCharts.forEach(c=>{try{c.destroy();}catch(e){}});dashCharts=[];}
 
+function renderDashConsolidado(el,allMonths,sumOut,sumIn){
+  const tOut=sumOut(entries);
+  const tIn=sumIn(entries);
+  const bal=tIn-tOut;
+  const nMonths=allMonths.length||1;
+  const avgOut=tOut/nMonths;
+  const avgIn=tIn/nMonths;
+
+  // Por categoria total
+  const byCat={};
+  entries.filter(e=>e.type==='saida').forEach(e=>{byCat[e.category]=(byCat[e.category]||0)+e.value;});
+  const topCats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const maxCat=topCats[0]?.[1]||1;
+  const barColors=['#6C5CE7','#00B894','#E17055','#00CEC9','#FDCB6E','#74B9FF','#FD79A8','#FF7675'];
+
+  // Evolução mensal
+  const mLabels=allMonths.map(m=>{const[y,mo]=m.split('-');return MONTHS[parseInt(mo)-1]+'/'+y.slice(2);});
+  const mOut=allMonths.map(m=>sumOut(entries.filter(e=>gMK(e.date)===m)));
+  const mIn=allMonths.map(m=>sumIn(entries.filter(e=>gMK(e.date)===m)));
+
+  el.innerHTML=`
+  <div class="consol-grid">
+    <div class="consol-card"><div class="consol-lbl">Total saídas</div><div class="consol-val" style="color:#FF4757">${fBRL(tOut)}</div><div style="font-size:10px;color:#aaa;margin-top:4px">Média ${fBRL(avgOut)}/mês</div></div>
+    <div class="consol-card"><div class="consol-lbl">Total entradas</div><div class="consol-val" style="color:#00B894">${fBRL(tIn)}</div><div style="font-size:10px;color:#aaa;margin-top:4px">Média ${fBRL(avgIn)}/mês</div></div>
+    <div class="consol-card"><div class="consol-lbl">Saldo período</div><div class="consol-val" style="color:${bal>=0?'#00B894':'#FF4757'}">${bal>=0?'+':''}${fBRL(bal)}</div><div style="font-size:10px;color:#aaa;margin-top:4px">${nMonths} meses</div></div>
+    <div class="consol-card"><div class="consol-lbl">Lançamentos</div><div class="consol-val" style="color:#6C5CE7">${entries.length}</div><div style="font-size:10px;color:#aaa;margin-top:4px">${allMonths.length} meses importados</div></div>
+  </div>
+  <div class="chart-section">
+    <div class="chart-section-title">Evolução mensal — todos os meses</div>
+    <div class="chart-container" style="height:200px"><canvas id="dc-consol-trend"></canvas></div>
+  </div>
+  <div class="chart-section">
+    <div class="chart-section-title">Gastos por categoria — período completo</div>
+    ${topCats.map(([cat,val],i)=>`
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:12px;color:#555">${cat}</span>
+        <span style="font-size:12px;font-weight:600;color:#333">${fBRL(val)}</span>
+      </div>
+      <div class="sum-bar-wrap"><div class="sum-bar-fill" style="width:${Math.round(val/maxCat*100)}%;background:${barColors[i%barColors.length]}"></div></div>
+      <div class="sum-pct">${Math.round(val/tOut*100)}% do total</div>
+    </div>`).join('')}
+  </div>`;
+
+  function doConsolCharts(){
+    const tc=new Chart(document.getElementById('dc-consol-trend'),{
+      type:'bar',
+      data:{labels:mLabels,datasets:[
+        {label:'Entradas',data:mIn,backgroundColor:'rgba(46,213,115,0.7)',borderRadius:4},
+        {label:'Saídas',data:mOut,backgroundColor:'rgba(255,71,87,0.7)',borderRadius:4}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{x:{ticks:{font:{size:9},color:'#aaa'}},y:{ticks:{callback:v=>'R$'+(v/1000).toFixed(0)+'k',font:{size:9},color:'#aaa'}}}}
+    });
+    dashCharts.push(tc);
+  }
+  if(typeof Chart!=='undefined')doConsolCharts();
+  else{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js';s.onload=doConsolCharts;document.head.appendChild(s);}
+}
+
 function renderDashboard(){
   destroyDashCharts();
   const el=document.getElementById('dash-content');
   const allMonths=[...new Set(entries.map(e=>gMK(e.date)))].sort();
   if(!allMonths.length){el.innerHTML='<div class="empty">Nenhum lançamento ainda.<br>Importe suas faturas para ver o dashboard.</div>';return;}
 
-  // KPIs: usa o mês mais recente COM dados (não necessariamente mês atual)
-  const today=new Date();
-  const fmt=d=>d.toISOString().slice(0,10);
   const sumOut=arr=>arr.filter(e=>e.type==='saida').reduce((s,e)=>s+e.value,0);
   const sumIn=arr=>arr.filter(e=>e.type==='entrada').reduce((s,e)=>s+e.value,0);
-  // Encontra mês mais recente com pelo menos 5 lançamentos
-  const monthCounts=allMonths.map(m=>({m,n:entries.filter(e=>gMK(e.date)===m).length}));
-  const bestMonth=(monthCounts.filter(x=>x.n>=5).pop()||monthCounts[monthCounts.length-1])?.m||allMonths[allMonths.length-1];
+
+  // Garantir fMonth válido
+  if(!allMonths.includes(fMonth)){
+    const monthCounts=allMonths.map(m=>({m,n:entries.filter(e=>gMK(e.date)===m).length}));
+    fMonth=(monthCounts.filter(x=>x.n>=5).pop()||monthCounts[monthCounts.length-1])?.m||allMonths[allMonths.length-1];
+  }
+  updateMonthNav('dashboard');
+
+  // MODO CONSOLIDADO
+  if(dashMode==='consol'){
+    renderDashConsolidado(el,allMonths,sumOut,sumIn);return;
+  }
+
+  // MODO MÊS
+  const bestMonth=fMonth;
   const prevMonth=allMonths[allMonths.indexOf(bestMonth)-1]||bestMonth;
   const last30=entries.filter(e=>gMK(e.date)===bestMonth);
   const prev30=entries.filter(e=>gMK(e.date)===prevMonth);
   const out30=sumOut(last30),in30=sumIn(last30),outP=sumOut(prev30),inP=sumIn(prev30);
   const bal30=in30-out30;
   const diffPct=outP>0?Math.round((out30/outP-1)*100):0;
+  const today=new Date();
+  const fmt=d=>d.toISOString().slice(0,10);
 
   // Monthly totals for chart
   const mLabels=allMonths.slice(-6).map(m=>{const[y,mo]=m.split('-');return MONTHS[parseInt(mo)-1]+'/'+y.slice(2);});
