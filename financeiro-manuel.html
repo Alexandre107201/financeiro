@@ -1316,25 +1316,65 @@ Responda APENAS com array JSON (sem markdown, sem texto extra):
 
 /* ================================================================
    RECURRENCE & INSTALLMENT DETECTION
+   Critérios rígidos: apenas gastos FIXOS de verdade (consórcios,
+   financiamentos, assinaturas) — excluindo categorias variáveis.
 ================================================================ */
 const Recurrence = {
-  // Normalize description: strip numbers and parcel info
+  // Categorias variáveis por natureza — NUNCA são recorrências fixas
+  VARIABLE_CATS: new Set([
+    '👤 Pessoal', '✈️ Viagem & Lazer',
+    '🏠 Casa Cyrela', '🔄 Operações entre empresas',
+    '🏢 Vila Fit', '🍽️ Vila Gourmet',
+    '🥗 Vila Sabor', '💰 Investimentos', '➕ Receitas',
+  ]),
+  // Subcategorias variáveis mesmo dentro de categorias mistas
+  VARIABLE_SUBS: new Set([
+    'Gasolina (Abastece Aí/Posto)', 'Gasolina', 'Manutenção', 'Pneus (Bono Pneus)',
+    'Obra/Construção', 'Materiais', 'Mão de Obra',
+    'Restaurantes (Coco Bambu/Noema)', 'Restaurantes (Outros)',
+    'Mercado/Supermercado', 'Mercado/Minimercado Help',
+    'Delivery (iFood/Outros)', 'Compras Online (MercadoLivre)',
+    'Compras Online (Shopee/AliExpress)', 'Farmácia (Drogasil/Pacheco)',
+    'Medicamentos (Diofarmed/PagueMenos)', 'Outros Pessoal', 'Outros',
+    'Lazer/Entretenimento', 'Roupas/Vestuário', 'Boleto Avulso',
+    'Estacionamento', 'Sem Parar/Pedágio', 'Outros Saúde',
+  ]),
+
+  // Chave por subcategoria+categoria (muito mais precisa)
   key(e) {
-    const base = (e.note || e.subcategory || '').toLowerCase()
-      .replace(/parc\s*\d+\/\d+/g, '').replace(/\d+/g, '')
+    const sub = (e.subcategory || '').trim();
+    const cat = (e.category || '').trim();
+    if (sub && sub !== 'Outros' && sub !== 'Outros Pessoal') return cat + '||' + sub;
+    const base = (e.note || '').toLowerCase()
+      .replace(/parc\s*\d+\/\d+/gi, '').replace(/\d+/g, '')
       .replace(/[^\wÀ-ú ]/g, '').trim().slice(0, 28);
-    return base || e.subcategory || '';
+    return base ? cat + '||' + base : cat;
   },
 
   detect() {
-    const months = Data.lastNMonths(4);
+    const months4 = Data.lastNMonths(4);
     const map = {};
+
     Data.entries
-      .filter(e => e.type === 'saida' && months.includes(monthKey(e.date)))
+      .filter(e => {
+        if (e.type !== 'saida') return false;
+        if (!months4.includes(monthKey(e.date))) return false;
+        // Excluir categorias variáveis
+        if (this.VARIABLE_CATS.has(e.category)) return false;
+        // Excluir subcategorias variáveis
+        if (this.VARIABLE_SUBS.has(e.subcategory)) return false;
+        // Excluir valores muito baixos
+        if (e.value < 50) return false;
+        return true;
+      })
       .forEach(e => {
         const k = this.key(e);
         if (!k) return;
-        if (!map[k]) map[k] = { key: k, cat: e.category, sub: e.subcategory, note: e.note || e.subcategory, months: {}, vals: [] };
+        if (!map[k]) map[k] = {
+          key: k, cat: e.category, sub: e.subcategory,
+          note: e.subcategory || e.note || '',
+          months: {}, vals: [],
+        };
         const mk = monthKey(e.date);
         map[k].months[mk] = (map[k].months[mk] || 0) + e.value;
         map[k].vals.push(e.value);
@@ -1342,12 +1382,15 @@ const Recurrence = {
 
     return Object.values(map).filter(r => {
       const mks = Object.keys(r.months);
-      if (mks.length < 2) return false;
+      // Exige presença em pelo menos 3 dos últimos 4 meses
+      if (mks.length < 3) return false;
       const vals = mks.map(m => r.months[m]);
       const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
       const dev = Math.sqrt(vals.reduce((a, b) => a + (b - avg) ** 2, 0) / vals.length);
-      r.avg = avg; r.freq = mks.length;
-      return avg > 20 && dev / avg < 0.45;
+      r.avg = avg;
+      r.freq = mks.length;
+      // Coeficiente de variação < 15% = valor muito estável (fixo de verdade)
+      return avg >= 50 && (dev / avg) < 0.15;
     }).sort((a, b) => b.avg - a.avg);
   },
 
@@ -2094,130 +2137,137 @@ const App = {
   // ---- FORECAST ----
   // Mostra APENAS compromissos já conhecidos: parcelas futuras (parc X/Y) + recorrências confirmadas.
   // Sem estimativas estatísticas de gastos variáveis.
+  // ---- FORECAST — apenas dados reais já lançados ----
+  // Mostra lançamentos com data FUTURA já existentes no banco
+  // + parcelas inferidas de séries "parc X/Y" já lançadas
   renderForecast() {
-    const el       = document.getElementById('forecast-content');
-    const recs     = Recurrence.detect();
-    const futParc  = Recurrence.futureInstallments();
-    const todayMk  = today().slice(0, 7);
+    const el      = document.getElementById('forecast-content');
+    const todayStr = today();
+    const todayMk  = todayStr.slice(0, 7);
 
-    // Agrupar parcelas futuras por mês
-    const parcByMonth = {};
+    // 1. Lançamentos com data futura já existentes (ex: débito automático lançado antecipadamente)
+    const futureEntries = Data.entries.filter(e =>
+      e.type === 'saida' && e.date > todayStr
+    ).sort((a, b) => a.date.localeCompare(b.date));
+
+    // 2. Parcelas futuras inferidas de séries "parc X/Y"
+    const futParc = Recurrence.futureInstallments()
+      .filter(f => f.date > todayStr)
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Unir e agrupar tudo por mês
+    const byMonth = {};
+
+    futureEntries.forEach(e => {
+      const mk = monthKey(e.date);
+      if (!byMonth[mk]) byMonth[mk] = { real: [], parc: [] };
+      byMonth[mk].real.push({ date: e.date, note: e.note || e.subcategory || e.category, category: e.category, value: e.value });
+    });
+
     futParc.forEach(f => {
-      const m = monthKey(f.date);
-      if (m <= todayMk) return; // só futuro
-      if (!parcByMonth[m]) parcByMonth[m] = [];
-      parcByMonth[m].push(f);
+      const mk = monthKey(f.date);
+      if (!byMonth[mk]) byMonth[mk] = { real: [], parc: [] };
+      byMonth[mk].parc.push(f);
     });
 
-    // Agrupar recorrências confirmadas por mês (próximos 6 meses)
-    const recByMonth = {};
-    const now = new Date();
-    for (let i = 1; i <= 6; i++) {
-      const d  = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      const mk = d.toISOString().slice(0, 7);
-      recByMonth[mk] = recs; // todas as recorrências detectadas aplicam a cada mês futuro
-    }
-
-    // Meses futuros com compromissos
-    const futureMks = [...new Set([
-      ...Object.keys(parcByMonth),
-      ...Object.keys(recByMonth),
-    ])].sort().slice(0, 8);
-
-    // Resumo por mês: só compromissos conhecidos
-    const monthSummaries = futureMks.map(mk => {
-      const parcTotal = (parcByMonth[mk] || []).reduce((a, b) => a + b.value, 0);
-      const recTotal  = (recByMonth[mk]  || []).reduce((a, r) => a + r.avg,   0);
-      return { mk, parcTotal, recTotal, total: parcTotal + recTotal };
-    });
-
-    const grandTotal = monthSummaries.reduce((a, b) => a + b.total, 0);
+    const sortedMonths = Object.keys(byMonth).sort();
+    const totalReal = futureEntries.reduce((a, e) => a + e.value, 0);
+    const totalParc = futParc.reduce((a, f) => a + f.value, 0);
+    const grandTotal = totalReal + totalParc;
 
     let html = '';
 
-    // KPI resumo
+    // KPIs
     html += `<div class="kpi-grid">
       <div class="kpi">
-        <div class="kpi-lbl">Parcelas contratadas</div>
-        <div class="kpi-val" style="color:var(--purple)">${fmtK(futParc.reduce((a,b)=>a+b.value,0))}</div>
-        <div class="kpi-trend">${futParc.length} parcelas detectadas</div>
+        <div class="kpi-lbl">Lançamentos futuros</div>
+        <div class="kpi-val" style="color:var(--purple)">${fmtK(totalReal)}</div>
+        <div class="kpi-trend">${futureEntries.length} lançamento${futureEntries.length !== 1 ? 's' : ''} com data futura</div>
       </div>
       <div class="kpi">
-        <div class="kpi-lbl">Fixo mensal estimado</div>
-        <div class="kpi-val" style="color:var(--orange)">${fmtK(recs.reduce((a,r)=>a+r.avg,0))}</div>
-        <div class="kpi-trend">${recs.length} recorrências confirmadas</div>
+        <div class="kpi-lbl">Parcelas inferidas (parc X/Y)</div>
+        <div class="kpi-val" style="color:var(--orange)">${fmtK(totalParc)}</div>
+        <div class="kpi-trend">${futParc.length} parcela${futParc.length !== 1 ? 's' : ''} a vencer</div>
       </div>
     </div>`;
 
-    // Resumo mês a mês
-    if (monthSummaries.length) {
-      html += `<div class="chart-card">
-        <div class="sec-title" style="margin-top:0">📅 Compromissos confirmados por mês</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:12px">
-          Apenas valores já lançados (parcelas parc X/Y) + recorrências detectadas nos últimos meses. Sem estimativas de gastos variáveis.
-        </div>`;
-      monthSummaries.forEach(p => {
-        html += `<div class="fc-proj-row">
-          <div class="fc-proj-hdr">
-            <span>${formatMonthLabel(p.mk)}</span>
-            <span style="color:var(--red);font-weight:700">${fBRL(p.total)}</span>
-          </div>
-          <div style="font-size:10px;color:var(--text3);margin-top:2px">
-            ${p.parcTotal > 0 ? `📋 Parcelas ${fBRL(p.parcTotal)}` : ''}
-            ${p.parcTotal > 0 && p.recTotal > 0 ? ' · ' : ''}
-            ${p.recTotal  > 0 ? `🔁 Recorrentes ${fBRL(p.recTotal)}` : ''}
-          </div>
-        </div>`;
-      });
-      html += `</div>`;
+    if (!sortedMonths.length) {
+      html += `<div class="card"><div class="empty">
+        Nenhum compromisso futuro encontrado nos dados.<br><br>
+        <span style="font-size:11px;color:var(--text3)">
+          Para o Fluxo funcionar, você pode:<br>
+          1. Lançar débitos futuros com data no futuro<br>
+          2. Registrar parcelas com "parc 3/12" na observação
+        </span>
+      </div></div>`;
+      el.innerHTML = html;
+      return;
     }
 
-    // Detalhamento parcelas por mês
+    // Resumo por mês
     html += `<div class="chart-card">
-      <div class="sec-title" style="margin-top:0">📋 Parcelas futuras já contratadas (${futParc.length})</div>`;
-    if (Object.keys(parcByMonth).length) {
-      Object.keys(parcByMonth).sort().forEach(m => {
-        const items = parcByMonth[m];
-        const tot   = items.reduce((a, b) => a + b.value, 0);
-        html += `<div style="margin:10px 0 4px;font-size:11px;font-weight:600;color:var(--purple)">${formatMonthLabel(m)} — ${fBRL(tot)}</div>`;
-        items.forEach(f => {
+      <div class="sec-title" style="margin-top:0">📅 Compromissos por mês</div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:12px">
+        Apenas dados já lançados — lançamentos com data futura + parcelas restantes detectadas nas observações (parc X/Y).
+      </div>`;
+
+    sortedMonths.forEach(mk => {
+      const { real, parc } = byMonth[mk];
+      const realTotal = real.reduce((a, i) => a + i.value, 0);
+      const parcTotal = parc.reduce((a, i) => a + i.value, 0);
+      const total     = realTotal + parcTotal;
+      html += `<div class="fc-proj-row">
+        <div class="fc-proj-hdr">
+          <span style="font-weight:700">${formatMonthLabel(mk)}</span>
+          <span style="color:var(--red);font-weight:700">${fBRL(total)}</span>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px">
+          ${real.length > 0  ? `📌 ${real.length} lançamento${real.length>1?'s':''} ${fBRL(realTotal)}` : ''}
+          ${real.length > 0 && parc.length > 0 ? ' · ' : ''}
+          ${parc.length > 0 ? `📋 ${parc.length} parcela${parc.length>1?'s':''} ${fBRL(parcTotal)}` : ''}
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+
+    // Detalhamento mês a mês
+    sortedMonths.forEach(mk => {
+      const { real, parc } = byMonth[mk];
+      if (!real.length && !parc.length) return;
+      const total = real.reduce((a,i)=>a+i.value,0) + parc.reduce((a,i)=>a+i.value,0);
+
+      html += `<div class="chart-card">
+        <div class="sec-title" style="margin-top:0">${formatMonthLabel(mk)} — ${fBRL(total)}</div>`;
+
+      if (real.length) {
+        html += `<div style="font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">📌 Lançamentos com data futura</div>`;
+        real.forEach(i => {
           html += `<div class="rec-row">
             <div>
-              <div>${f.note.slice(0, 44)}</div>
+              <div>${(i.note || '').slice(0, 44)}</div>
+              <div class="rec-meta">${i.category} · ${i.date.split('-').reverse().join('/')}</div>
+            </div>
+            <div style="font-weight:600;color:var(--red)">${fBRL(i.value)}</div>
+          </div>`;
+        });
+      }
+
+      if (parc.length) {
+        if (real.length) html += `<div style="margin-top:10px"></div>`;
+        html += `<div style="font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">📋 Parcelas restantes (parc X/Y)</div>`;
+        parc.forEach(f => {
+          html += `<div class="rec-row">
+            <div>
+              <div>${(f.note || '').slice(0, 44)}</div>
               <div class="rec-meta">${f.category}</div>
             </div>
             <div style="font-weight:600;color:var(--red)">${fBRL(f.value)}</div>
           </div>`;
         });
-      });
-    } else {
-      html += `<div class="empty">Nenhuma parcela futura detectada.<br>
-        <span style="font-size:11px">Dica: nas observações do lançamento, escreva "parc 3/12" para o app calcular as parcelas restantes.</span>
-      </div>`;
-    }
-    html += `</div>`;
+      }
 
-    // Recorrências confirmadas
-    html += `<div class="chart-card">
-      <div class="sec-title" style="margin-top:0">🔁 Recorrências confirmadas (aplicam todo mês)</div>`;
-    if (recs.length) {
-      const recTotal = recs.reduce((a, r) => a + r.avg, 0);
-      html += `<div style="font-size:11px;color:var(--text2);margin-bottom:10px">
-        Total estimado/mês: <strong>${fBRL(recTotal)}</strong> · detectadas em ${recs[0]?.freq || 2}+ meses consecutivos
-      </div>`;
-      recs.forEach(r => {
-        html += `<div class="rec-row">
-          <div>
-            <div>${r.note.slice(0, 40)}</div>
-            <div class="rec-meta">${r.cat} · ${r.freq}x nos últimos meses</div>
-          </div>
-          <div style="font-weight:600">${fBRL(r.avg)}/mês</div>
-        </div>`;
-      });
-    } else {
-      html += `<div class="empty">Lance pelo menos 2 meses de dados para detectar recorrências.</div>`;
-    }
-    html += `</div>`;
+      html += `</div>`;
+    });
 
     el.innerHTML = html;
   },
