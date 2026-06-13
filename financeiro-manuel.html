@@ -2092,82 +2092,132 @@ const App = {
   },
 
   // ---- FORECAST ----
+  // Mostra APENAS compromissos já conhecidos: parcelas futuras (parc X/Y) + recorrências confirmadas.
+  // Sem estimativas estatísticas de gastos variáveis.
   renderForecast() {
-    const el = document.getElementById('forecast-content');
+    const el       = document.getElementById('forecast-content');
     const recs     = Recurrence.detect();
     const futParc  = Recurrence.futureInstallments();
-    const months3  = Data.lastNMonths(3);
-    const avgVar   = months3.map(m => {
-      const tot   = Data.sumMonth(m, 'saida');
-      const fixed = Data.entries
-        .filter(e => e.type === 'saida' && monthKey(e.date) === m && recs.some(r => Recurrence.key(e) === r.key))
-        .reduce((a, b) => a + b.value, 0);
-      return tot - fixed;
-    }).reduce((a, b) => a + b, 0) / 3;
-    const avgInc   = months3.map(m => Data.sumMonth(m, 'entrada')).reduce((a, b) => a + b, 0) / 3;
-    const committed = recs.reduce((a, r) => a + r.avg, 0);
+    const todayMk  = today().slice(0, 7);
 
-    const proj = [];
-    const now  = new Date();
-    for (let i = 1; i <= 4; i++) {
-      const d  = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      const mk = d.toISOString().slice(0, 7);
-      const parc = futParc.filter(f => monthKey(f.date) === mk).reduce((a, b) => a + b.value, 0);
-      proj.push({ mk, inc: avgInc, out: committed + avgVar + parc, parc, committed, avgVar });
-    }
-
-    const byMonth = {};
+    // Agrupar parcelas futuras por mês
+    const parcByMonth = {};
     futParc.forEach(f => {
       const m = monthKey(f.date);
-      if (!byMonth[m]) byMonth[m] = [];
-      byMonth[m].push(f);
+      if (m <= todayMk) return; // só futuro
+      if (!parcByMonth[m]) parcByMonth[m] = [];
+      parcByMonth[m].push(f);
     });
 
-    let html = `<div class="chart-card">
-      <div class="sec-title" style="margin-top:0">🔮 Projeção próximos 4 meses</div>
-      ${proj.map(p => {
-        const saldo = p.inc - p.out;
-        return `<div class="fc-proj-row">
-          <div class="fc-proj-hdr">
-            <span>${formatMonthLabel(p.mk)}</span>
-            <span style="color:${saldo >= 0 ? 'var(--green)' : 'var(--red)'}">${saldo >= 0 ? '+' : ''}${fBRL(saldo)}</span>
-          </div>
-          <div style="font-size:10px;color:var(--text3)">
-            Receita prev. ${fmtK(p.inc)} · Fixo ${fmtK(p.committed)} · Var. méd. ${fmtK(p.avgVar)} · Parcelas ${fmtK(p.parc)}
-          </div>
-        </div>`;
-      }).join('')}
+    // Agrupar recorrências confirmadas por mês (próximos 6 meses)
+    const recByMonth = {};
+    const now = new Date();
+    for (let i = 1; i <= 6; i++) {
+      const d  = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const mk = d.toISOString().slice(0, 7);
+      recByMonth[mk] = recs; // todas as recorrências detectadas aplicam a cada mês futuro
+    }
+
+    // Meses futuros com compromissos
+    const futureMks = [...new Set([
+      ...Object.keys(parcByMonth),
+      ...Object.keys(recByMonth),
+    ])].sort().slice(0, 8);
+
+    // Resumo por mês: só compromissos conhecidos
+    const monthSummaries = futureMks.map(mk => {
+      const parcTotal = (parcByMonth[mk] || []).reduce((a, b) => a + b.value, 0);
+      const recTotal  = (recByMonth[mk]  || []).reduce((a, r) => a + r.avg,   0);
+      return { mk, parcTotal, recTotal, total: parcTotal + recTotal };
+    });
+
+    const grandTotal = monthSummaries.reduce((a, b) => a + b.total, 0);
+
+    let html = '';
+
+    // KPI resumo
+    html += `<div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-lbl">Parcelas contratadas</div>
+        <div class="kpi-val" style="color:var(--purple)">${fmtK(futParc.reduce((a,b)=>a+b.value,0))}</div>
+        <div class="kpi-trend">${futParc.length} parcelas detectadas</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Fixo mensal estimado</div>
+        <div class="kpi-val" style="color:var(--orange)">${fmtK(recs.reduce((a,r)=>a+r.avg,0))}</div>
+        <div class="kpi-trend">${recs.length} recorrências confirmadas</div>
+      </div>
     </div>`;
 
+    // Resumo mês a mês
+    if (monthSummaries.length) {
+      html += `<div class="chart-card">
+        <div class="sec-title" style="margin-top:0">📅 Compromissos confirmados por mês</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:12px">
+          Apenas valores já lançados (parcelas parc X/Y) + recorrências detectadas nos últimos meses. Sem estimativas de gastos variáveis.
+        </div>`;
+      monthSummaries.forEach(p => {
+        html += `<div class="fc-proj-row">
+          <div class="fc-proj-hdr">
+            <span>${formatMonthLabel(p.mk)}</span>
+            <span style="color:var(--red);font-weight:700">${fBRL(p.total)}</span>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">
+            ${p.parcTotal > 0 ? `📋 Parcelas ${fBRL(p.parcTotal)}` : ''}
+            ${p.parcTotal > 0 && p.recTotal > 0 ? ' · ' : ''}
+            ${p.recTotal  > 0 ? `🔁 Recorrentes ${fBRL(p.recTotal)}` : ''}
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    // Detalhamento parcelas por mês
     html += `<div class="chart-card">
-      <div class="sec-title" style="margin-top:0">📋 Parcelas futuras (${futParc.length})</div>`;
-    if (futParc.length) {
-      Object.keys(byMonth).sort().slice(0, 8).forEach(m => {
-        const tot = byMonth[m].reduce((a, b) => a + b.value, 0);
+      <div class="sec-title" style="margin-top:0">📋 Parcelas futuras já contratadas (${futParc.length})</div>`;
+    if (Object.keys(parcByMonth).length) {
+      Object.keys(parcByMonth).sort().forEach(m => {
+        const items = parcByMonth[m];
+        const tot   = items.reduce((a, b) => a + b.value, 0);
         html += `<div style="margin:10px 0 4px;font-size:11px;font-weight:600;color:var(--purple)">${formatMonthLabel(m)} — ${fBRL(tot)}</div>`;
-        byMonth[m].forEach(f => {
+        items.forEach(f => {
           html += `<div class="rec-row">
-            <div>${f.note.slice(0, 40)}<div class="rec-meta">${f.category}</div></div>
-            <div>${fBRL(f.value)}</div>
+            <div>
+              <div>${f.note.slice(0, 44)}</div>
+              <div class="rec-meta">${f.category}</div>
+            </div>
+            <div style="font-weight:600;color:var(--red)">${fBRL(f.value)}</div>
           </div>`;
         });
       });
     } else {
-      html += '<div class="empty">Adicione "parc X/Y" nas observações para detectar parcelas futuras</div>';
+      html += `<div class="empty">Nenhuma parcela futura detectada.<br>
+        <span style="font-size:11px">Dica: nas observações do lançamento, escreva "parc 3/12" para o app calcular as parcelas restantes.</span>
+      </div>`;
     }
-    html += '</div>';
+    html += `</div>`;
 
+    // Recorrências confirmadas
     html += `<div class="chart-card">
-      <div class="sec-title" style="margin-top:0">🔁 Gastos fixos recorrentes</div>
-      ${recs.slice(0, 20).map(r => `
-        <div class="rec-row">
+      <div class="sec-title" style="margin-top:0">🔁 Recorrências confirmadas (aplicam todo mês)</div>`;
+    if (recs.length) {
+      const recTotal = recs.reduce((a, r) => a + r.avg, 0);
+      html += `<div style="font-size:11px;color:var(--text2);margin-bottom:10px">
+        Total estimado/mês: <strong>${fBRL(recTotal)}</strong> · detectadas em ${recs[0]?.freq || 2}+ meses consecutivos
+      </div>`;
+      recs.forEach(r => {
+        html += `<div class="rec-row">
           <div>
-            <div>${r.note.slice(0, 38)}</div>
+            <div>${r.note.slice(0, 40)}</div>
             <div class="rec-meta">${r.cat} · ${r.freq}x nos últimos meses</div>
           </div>
           <div style="font-weight:600">${fBRL(r.avg)}/mês</div>
-        </div>`).join('') || '<div class="empty" style="padding:20px">Sem recorrências detectadas</div>'}
-    </div>`;
+        </div>`;
+      });
+    } else {
+      html += `<div class="empty">Lance pelo menos 2 meses de dados para detectar recorrências.</div>`;
+    }
+    html += `</div>`;
 
     el.innerHTML = html;
   },
