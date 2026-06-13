@@ -69,6 +69,16 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 .month-nav-btn{width:36px;height:36px;border-radius:50%;border:1.5px solid #E8E6E0;background:#F8F8F6;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
 .month-nav-btn:hover{background:#1A1A22;color:#fff;border-color:#1A1A22}
 .month-nav-btn:disabled{opacity:.25;cursor:default}
+.month-nav-label{cursor:pointer;user-select:none}
+.month-nav-label:active{opacity:.7}
+.month-picker-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;justify-content:center}
+.month-picker-sheet{background:#FAFAF8;border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:75vh;overflow-y:auto;padding:20px 16px 40px;box-shadow:0 -4px 24px rgba(0,0,0,.15)}
+.month-picker-title{font-family:'Syne',sans-serif;font-weight:700;font-size:16px;margin-bottom:16px;text-align:center;color:#1A1A22}
+.month-picker-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.month-picker-item{padding:13px 8px;border:1.5px solid #E8E6E0;border-radius:12px;text-align:center;cursor:pointer;font-size:13px;font-weight:500;color:#555;background:#fff;transition:all .15s}
+.month-picker-item.on{background:#1A1A22;color:#fff;border-color:#1A1A22}
+.month-picker-item:hover:not(.on){background:#F0F0EE}
+.month-picker-close{width:100%;padding:14px;border:none;background:#F0F0EE;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;margin-top:14px;color:#555}
 .dash-mode-toggle{display:flex;gap:6px;margin-bottom:16px;background:#F8F8F6;border-radius:12px;padding:4px}
 .dash-mode-btn{flex:1;padding:8px;border:none;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:#888;transition:all .2s}
 .dash-mode-btn.on{background:#fff;color:#1A1A22;box-shadow:0 1px 4px rgba(0,0,0,.08)}
@@ -350,7 +360,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   <input id="search-inp" class="inp" type="text" placeholder="🔍 Buscar por descrição, valor, categoria..." oninput="renderList()" style="margin-bottom:12px">
   <div id="lm-nav" class="month-nav">
     <button class="month-nav-btn" id="lm-prev" onclick="navMonth('list',-1)">‹</button>
-    <div class="month-nav-label"><span id="lm-label">—</span><span class="month-nav-sub" id="lm-count"></span></div>
+    <div class="month-nav-label" onclick="openMonthPicker('list')"><span id="lm-label">—</span> ▾<br><span class="month-nav-sub" id="lm-count"></span></div>
     <button class="month-nav-btn" id="lm-next" onclick="navMonth('list',1)">›</button>
   </div>
   <div id="list-entries"></div>
@@ -360,7 +370,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 <div id="view-summary" class="view">
   <div id="sm-nav" class="month-nav">
     <button class="month-nav-btn" id="sm-prev" onclick="navMonth('summary',-1)">‹</button>
-    <div class="month-nav-label"><span id="sm-label">—</span><span class="month-nav-sub" id="sm-count"></span></div>
+    <div class="month-nav-label" onclick="openMonthPicker('summary')"><span id="sm-label">—</span> ▾<br><span class="month-nav-sub" id="sm-count"></span></div>
     <button class="month-nav-btn" id="sm-next" onclick="navMonth('summary',1)">›</button>
   </div>
   <div class="sum-grid">
@@ -379,7 +389,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
   </div>
   <div id="dash-month-nav" class="month-nav">
     <button class="month-nav-btn" id="dm-prev" onclick="navMonth('dashboard',-1)">‹</button>
-    <div class="month-nav-label"><span id="dm-label">—</span><span class="month-nav-sub" id="dm-count"></span></div>
+    <div class="month-nav-label" onclick="openMonthPicker('dashboard')"><span id="dm-label">—</span> ▾<br><span class="month-nav-sub" id="dm-count"></span></div>
     <button class="month-nav-btn" id="dm-next" onclick="navMonth('dashboard',1)">›</button>
   </div>
   <div id="dash-content"></div>
@@ -696,6 +706,34 @@ function navMonth(view,dir){
 }
 
 function renderMF(id){/* legacy no-op — replaced by month-nav */}
+
+// ===== MONTH PICKER =====
+let _pickerView='list';
+function openMonthPicker(view){
+  _pickerView=view;
+  const months=getAllMonths(); // newest first
+  const grid=document.getElementById('month-picker-grid');
+  if(!grid)return;
+  grid.innerHTML=months.map(m=>{
+    const[y,mo]=m.split('-');
+    const lbl=MONTHS[parseInt(mo)-1]+'/'+y.slice(2);
+    return `<div class="month-picker-item${m===fMonth?' on':''}" onclick="pickMonth('${m}')">${lbl}</div>`;
+  }).join('');
+  document.getElementById('month-picker-overlay').style.display='flex';
+}
+function closeMonthPicker(){
+  const el=document.getElementById('month-picker-overlay');
+  if(el)el.style.display='none';
+}
+function pickMonth(m){
+  fMonth=m;
+  updateMonthNav('all');
+  closeMonthPicker();
+  if(_pickerView==='list')renderList();
+  else if(_pickerView==='summary')renderSummary();
+  else if(_pickerView==='analytics')renderAnalytics();
+  else if(_pickerView==='dashboard')renderDashboard();
+}
 function setFM(m){fMonth=m;updateMonthNav('all');if(curView==='list')renderList();if(curView==='summary')renderSummary();if(curView==='analytics')renderAnalytics();}
 
 function renderList(){
@@ -858,8 +896,10 @@ let dashCharts=[];
 function destroyDashCharts(){dashCharts.forEach(c=>{try{c.destroy();}catch(e){}});dashCharts=[];}
 
 function renderDashConsolidado(el,allMonths,sumOut,sumIn){
-  const tOut=sumOut(entries);
-  const tIn=sumIn(entries);
+  // Usa TODOS os entries, independente do mês selecionado
+  const allEntries=entries;
+  const tOut=sumOut(allEntries);
+  const tIn=sumIn(allEntries);
   const bal=tIn-tOut;
   const nMonths=allMonths.length||1;
   const avgOut=tOut/nMonths;
@@ -867,22 +907,22 @@ function renderDashConsolidado(el,allMonths,sumOut,sumIn){
 
   // Por categoria total
   const byCat={};
-  entries.filter(e=>e.type==='saida').forEach(e=>{byCat[e.category]=(byCat[e.category]||0)+e.value;});
+  allEntries.filter(e=>e.type==='saida').forEach(e=>{byCat[e.category]=(byCat[e.category]||0)+e.value;});
   const topCats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const maxCat=topCats[0]?.[1]||1;
   const barColors=['#6C5CE7','#00B894','#E17055','#00CEC9','#FDCB6E','#74B9FF','#FD79A8','#FF7675'];
 
   // Evolução mensal
   const mLabels=allMonths.map(m=>{const[y,mo]=m.split('-');return MONTHS[parseInt(mo)-1]+'/'+y.slice(2);});
-  const mOut=allMonths.map(m=>sumOut(entries.filter(e=>gMK(e.date)===m)));
-  const mIn=allMonths.map(m=>sumIn(entries.filter(e=>gMK(e.date)===m)));
+  const mOut=allMonths.map(m=>sumOut(allEntries.filter(e=>gMK(e.date)===m)));
+  const mIn=allMonths.map(m=>sumIn(allEntries.filter(e=>gMK(e.date)===m)));
 
   el.innerHTML=`
   <div class="consol-grid">
     <div class="consol-card"><div class="consol-lbl">Total saídas</div><div class="consol-val" style="color:#FF4757">${fBRL(tOut)}</div><div style="font-size:10px;color:#aaa;margin-top:4px">Média ${fBRL(avgOut)}/mês</div></div>
     <div class="consol-card"><div class="consol-lbl">Total entradas</div><div class="consol-val" style="color:#00B894">${fBRL(tIn)}</div><div style="font-size:10px;color:#aaa;margin-top:4px">Média ${fBRL(avgIn)}/mês</div></div>
     <div class="consol-card"><div class="consol-lbl">Saldo período</div><div class="consol-val" style="color:${bal>=0?'#00B894':'#FF4757'}">${bal>=0?'+':''}${fBRL(bal)}</div><div style="font-size:10px;color:#aaa;margin-top:4px">${nMonths} meses</div></div>
-    <div class="consol-card"><div class="consol-lbl">Lançamentos</div><div class="consol-val" style="color:#6C5CE7">${entries.length}</div><div style="font-size:10px;color:#aaa;margin-top:4px">${allMonths.length} meses importados</div></div>
+    <div class="consol-card"><div class="consol-lbl">Lançamentos</div><div class="consol-val" style="color:#6C5CE7">${allEntries.length}</div><div style="font-size:10px;color:#aaa;margin-top:4px">${allMonths.length} meses importados</div></div>
   </div>
   <div class="chart-section">
     <div class="chart-section-title">Evolução mensal — todos os meses</div>
@@ -2605,5 +2645,12 @@ sv=function(v){
 setTimeout(()=>{sv('dashboard');},80);
 </script>
 
+<div id="month-picker-overlay" class="month-picker-overlay" style="display:none" onclick="if(event.target===this)closeMonthPicker()">
+  <div class="month-picker-sheet">
+    <div class="month-picker-title">Selecionar período</div>
+    <div id="month-picker-grid" class="month-picker-grid"></div>
+    <button class="month-picker-close" onclick="closeMonthPicker()">✕ Fechar</button>
+  </div>
+</div>
 </body>
 </html>
