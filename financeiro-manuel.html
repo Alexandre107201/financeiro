@@ -1498,6 +1498,9 @@ function parseBBFatura(text){
     if(fechMatch){fatYear=fechMatch[3];fatMonth=parseInt(fechMatch[2]);}}
   const fatYearN=parseInt(fatYear);
 
+  // Data de cobrança = mês da fatura (dia 1 do mês de vencimento)
+  const fatDateStr=`${fatYear}-${String(fatMonth).padStart(2,'0')}-01`;
+
   let m;
   while((m=lineRe.exec(text))!==null){
     const [,dateRaw,desc,valStr]=m;
@@ -1506,14 +1509,23 @@ function parseBBFatura(text){
     if(isNaN(val)||val<=0)continue;
     const context=text.slice(Math.max(0,m.index-5),m.index+5);
     if(context.includes('- R$')||context.includes('-R$'))continue;
-    const [dd,mm2]=dateRaw.split('/');
-    const mo=parseInt(mm2);
-    // Se mês da compra é maior que mês do vencimento+1, é do ano anterior
-    let year=fatYearN;
-    if(mo>fatMonth+1)year=fatYearN-1;
-    const date=`${year}-${mm2}-${dd}`;
-    const cat=autoClassify(desc);
-    entries.push({data:date,desc:desc.replace(/\s{2,}/g,' ').trim(),valor:val,tipo:'saida',...cat});
+    // Detectar se é parcela: PARC XX/YY no desc
+    const isParcela=/parc\s*\d+\/\d+/i.test(desc);
+    let date;
+    if(isParcela){
+      // Parcela: usa data da fatura (quando saiu do bolso)
+      date=fatDateStr;
+    } else {
+      // Compra à vista: usa data real da compra
+      const [dd,mm2]=dateRaw.split('/');
+      const mo=parseInt(mm2);
+      let year=fatYearN;
+      if(mo>fatMonth+1)year=fatYearN-1;
+      date=`${year}-${mm2}-${dd}`;
+    }
+    const cleanDesc=desc.replace(/\s{2,}/g,' ').trim();
+    const cat=autoClassify(cleanDesc);
+    entries.push({data:date,desc:cleanDesc,valor:val,tipo:'saida',...cat});
   }
   return entries.length?entries:null;
 }
