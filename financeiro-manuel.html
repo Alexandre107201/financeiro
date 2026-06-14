@@ -1636,11 +1636,14 @@ const GitHub = {
   getToken() { return Store.get('gh_token', ''); },
   setToken(t) { Store.set('gh_token', t.trim()); },
 
-  _headers() {
-    return {
-      'Authorization': 'Bearer ' + this.getToken(),
+  _headers(requireAuth = false) {
+    const h = {
       'Accept': 'application/vnd.github+json',
       'Content-Type': 'application/json',
+    };
+    const t = this.getToken();
+    if (t) h['Authorization'] = 'Bearer ' + t;
+    return h; // Authorization só incluído se token existir — GET funciona sem token em repo público
     };
   },
 
@@ -1667,11 +1670,7 @@ const GitHub = {
   },
 
   async loadRemote(manual = false) {
-    const token = this.getToken();
-    if (!token) {
-      if (manual) this._status('Configure o token primeiro', 'err', 'modal');
-      return;
-    }
+    // Leitura funciona sem token em repo público; só save exige token
     this._status('Sincronizando...', 'loading');
     if (manual) this._status('Baixando...', 'loading', 'modal');
     try {
