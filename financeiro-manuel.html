@@ -1025,7 +1025,7 @@ const Data = {
   learnDict: {},
 
   load() {
-    this.entries       = Store.get('fm_e', []);
+    this.entries       = Store.get('fm_e', []).sort((a, b) => b.date.localeCompare(a.date));
     this.budgets       = Store.get('fm_budgets', {});
     this.assets        = Store.get('fm_assets', []);
     this.learnDict     = Store.get('fm_learn', {});
