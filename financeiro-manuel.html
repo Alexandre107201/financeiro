@@ -527,6 +527,14 @@ body.dark .an-insight { background: #0A2310; border-color: #1A4020; color: #66CC
 body.dark .inp, body.dark .modal-inp, body.dark .modal-sel,
 body.dark .imp-sel, body.dark .add-inp, body.dark .bud-inp { background: var(--bg2); color: var(--text); border-color: var(--border); }
 body.dark .month-item { background: var(--surface); color: var(--text2); border-color: var(--border); }
+
+/* ================================================================
+   GITHUB SYNC
+================================================================ */
+#gh-btn.syncing { animation: pulse 1s infinite; color: var(--accent-dk); }
+#gh-btn.ok      { color: var(--green); }
+#gh-btn.err     { color: var(--red); }
+
 </style>
 </head>
 <body>
@@ -543,8 +551,10 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
     <div id="hdr-date" class="hdr-date"></div>
     <button class="icon-btn" onclick="App.toggleDark()" id="dark-btn" title="Modo escuro">🌙</button>
     <button class="icon-btn" onclick="App.exportCSV()" title="Exportar CSV">⬇</button>
+    <button class="icon-btn" onclick="App.openGHConfig()" id="gh-btn" title="GitHub Sync">☁</button>
   </div>
 </div>
+<div id="gh-status-bar" style="display:none;padding:4px 16px;font-size:10px;text-align:right;letter-spacing:1px;background:var(--bg)"></div>
 
 <!-- ================================================================
      NAV
@@ -813,6 +823,11 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
       <input id="cfg-new-cat" class="add-inp" type="text" placeholder="Nome da categoria" onkeydown="if(event.key==='Enter')App.addCategory()">
       <button class="add-btn" onclick="App.addCategory()">+</button>
     </div>
+  </div>
+  <div class="sec-title" style="margin-top:24px">&#x2601; GitHub Sync</div>
+  <div class="card" style="margin-bottom:12px">
+    <div id="cfg-gh-status" style="font-size:12px;margin-bottom:10px"></div>
+    <button class="btn btn-ghost" style="width:100%" onclick="App.openGHConfig()">&#x1F511; Configurar / ver token</button>
   </div>
   <div class="sec-title" style="margin-top:24px">Dados & Backup</div>
   <div class="card">
@@ -1609,6 +1624,146 @@ function drawSparkline(canvas, data, color) {
   c.fillStyle = g; c.fill();
 }
 
+
+/* ================================================================
+   GITHUB SYNC
+================================================================ */
+const GitHub = {
+  REPO:   'Alexandre107201/financeiro',
+  FILE:   'dados.json',
+  BRANCH: 'main',
+
+  getToken() { return Store.get('gh_token', ''); },
+  setToken(t) { Store.set('gh_token', t.trim()); },
+
+  _headers() {
+    return {
+      'Authorization': 'token ' + this.getToken(),
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+    };
+  },
+
+  async _getFileMeta() {
+    const r = await fetch(
+      `https://api.github.com/repos/${this.REPO}/contents/${this.FILE}?ref=${this.BRANCH}&t=${Date.now()}`,
+      { headers: this._headers() }
+    );
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error('GitHub ' + r.status + ' ' + r.statusText);
+    return r.json();
+  },
+
+  _buildPayload() {
+    return JSON.stringify({
+      version: 24,
+      syncedAt: new Date().toISOString(),
+      entries: Data.entries,
+      cats: Data.cats,
+      budgets: Data.budgets,
+      assets: Data.assets,
+      compromissos: Data.compromissos || [],
+    });
+  },
+
+  async loadRemote(manual = false) {
+    const token = this.getToken();
+    if (!token) {
+      if (manual) this._status('Configure o token primeiro', 'err', 'modal');
+      return;
+    }
+    this._status('Sincronizando...', 'loading');
+    if (manual) this._status('Baixando...', 'loading', 'modal');
+    try {
+      const meta = await this._getFileMeta();
+      if (!meta) {
+        this._status('');
+        if (manual) this._status('Nenhum dado remoto ainda', 'ok', 'modal');
+        return;
+      }
+      const jsonStr = decodeURIComponent(escape(atob(meta.content.replace(/\n/g, ''))));
+      const remote = JSON.parse(jsonStr);
+      if (!remote.entries || !Array.isArray(remote.entries)) return;
+
+      const existingKeys = new Set(Data.entries.map(e => Data.dedupKey(e)));
+      let added = 0;
+      for (const e of remote.entries) {
+        const k = Data.dedupKey(e);
+        if (!existingKeys.has(k)) {
+          Data.entries.push(e);
+          existingKeys.add(k);
+          added++;
+        }
+      }
+      if (added > 0) {
+        Data.entries.sort((a, b) => b.date.localeCompare(a.date));
+        Data.saveEntries();
+        App.renderView(State.curView);
+      }
+      const msg = added > 0 ? `+${added} lançamentos do GitHub` : 'Dados atualizados';
+      this._status(msg, 'ok');
+      if (manual) this._status(msg, 'ok', 'modal');
+      setTimeout(() => this._status(''), 4000);
+    } catch (e) {
+      const msg = 'Erro ao baixar: ' + (e.message || e);
+      this._status(msg, 'err');
+      if (manual) this._status(msg, 'err', 'modal');
+      console.error('GitHub loadRemote:', e);
+    }
+  },
+
+  async save(manual = false) {
+    const token = this.getToken();
+    if (!token) return;
+    this._status('Salvando...', 'loading');
+    if (manual) this._status('Enviando...', 'loading', 'modal');
+    try {
+      const meta = await this._getFileMeta();
+      const content = btoa(unescape(encodeURIComponent(this._buildPayload())));
+      const body = {
+        message: 'sync ' + new Date().toISOString().slice(0, 16).replace('T', ' '),
+        content,
+        branch: this.BRANCH,
+      };
+      if (meta && meta.sha) body.sha = meta.sha;
+      const r = await fetch(
+        `https://api.github.com/repos/${this.REPO}/contents/${this.FILE}`,
+        { method: 'PUT', headers: this._headers(), body: JSON.stringify(body) }
+      );
+      if (!r.ok) throw new Error('GitHub ' + r.status + ' ' + r.statusText);
+      this._status('Salvo', 'ok');
+      if (manual) this._status('Enviado com sucesso!', 'ok', 'modal');
+      setTimeout(() => this._status(''), 3000);
+    } catch (e) {
+      const msg = 'Erro ao salvar: ' + (e.message || e);
+      this._status(msg, 'err');
+      if (manual) this._status(msg, 'err', 'modal');
+      console.error('GitHub save:', e);
+    }
+  },
+
+  _status(msg, type, target) {
+    const bar = document.getElementById('gh-status-bar');
+    if (bar && target !== 'modal') {
+      bar.textContent = msg ? ('☁ ' + msg) : '';
+      bar.style.display = msg ? '' : 'none';
+      bar.style.color = type === 'ok' ? 'var(--green)' : type === 'err' ? 'var(--red)' : 'var(--text3)';
+    }
+    const btn = document.getElementById('gh-btn');
+    if (btn && target !== 'modal') {
+      btn.classList.remove('syncing', 'ok', 'err');
+      if (type) btn.classList.add(type === 'loading' ? 'syncing' : type);
+    }
+    if (target === 'modal') {
+      const el = document.getElementById('gh-modal-status');
+      if (el) {
+        el.textContent = msg;
+        el.style.color = type === 'ok' ? 'var(--green)' : type === 'err' ? 'var(--red)' : 'var(--text3)';
+      }
+    }
+  },
+};
+
 /* ================================================================
    APP STATE
 ================================================================ */
@@ -1650,6 +1805,8 @@ const App = {
       document.getElementById('dark-btn').textContent = '☀️';
     }
     this.navigate('dashboard');
+    GitHub.loadRemote();
+    this.updateGHIcon();
   },
 
   updateHeader() {
@@ -1839,6 +1996,7 @@ const App = {
       note:        document.getElementById('add-note').value.trim(),
     };
     Data.addEntry(entry);
+    GitHub.save();
     // Reset form
     document.getElementById('add-value').value = '';
     document.getElementById('add-note').value = '';
@@ -2893,6 +3051,12 @@ const App = {
 
     const stats = document.getElementById('cfg-stats');
     if (stats) stats.textContent = `${Data.entries.length} lançamentos · ${Object.keys(Data.cats).length} categorias`;
+    const ghStatus = document.getElementById('cfg-gh-status');
+    if (ghStatus) {
+      const hasToken = !!GitHub.getToken();
+      ghStatus.textContent = hasToken ? '✓ Token configurado — sync automático ativo' : '⚠ Token não configurado — dados não sincronizados';
+      ghStatus.style.color = hasToken ? 'var(--green)' : 'var(--orange)';
+    }
   },
 
   toggleCfg(cat) {
@@ -3104,6 +3268,7 @@ const App = {
 
   confirmImport() {
     const { added, skipped } = Data.importEntries(State.importBuffer);
+    GitHub.save();
     State.importBuffer = [];
     document.getElementById('imp-results').innerHTML = '';
     const s = document.getElementById('imp-status');
@@ -3222,6 +3387,31 @@ const App = {
     this.closeModal('rename');
   },
 
+  // ---- GITHUB SYNC ----
+  openGHConfig() {
+    const el = document.getElementById('gh-token-inp');
+    if (el) el.value = GitHub.getToken();
+    const s = document.getElementById('gh-modal-status');
+    if (s) s.textContent = '';
+    this.openModal('github');
+  },
+
+  saveGHToken() {
+    const val = (document.getElementById('gh-token-inp') ? document.getElementById('gh-token-inp').value : '').trim();
+    if (!val) return;
+    GitHub.setToken(val);
+    this.updateGHIcon();
+    this.closeModal('github');
+    GitHub.loadRemote();
+  },
+
+  updateGHIcon() {
+    const btn = document.getElementById('gh-btn');
+    if (!btn) return;
+    btn.title = GitHub.getToken() ? 'GitHub Sync (ativo)' : 'GitHub Sync (configurar)';
+    btn.style.opacity = GitHub.getToken() ? '1' : '0.5';
+  },
+
   // ---- EXPORT ----
   exportCSV() {
     if (!Data.entries.length) return;
@@ -3267,5 +3457,32 @@ document.addEventListener('DOMContentLoaded', () => {
   App.init();
 });
 </script>
+
+<!-- GitHub Sync Config -->
+<div id="modal-github" class="modal-overlay" onclick="if(event.target===this)App.closeModal('github')">
+  <div class="modal-sheet">
+    <div class="modal-title">&#x2601; GitHub Sync</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">
+      Cole seu <b>Personal Access Token</b> do GitHub com permissão <code>Contents: Read &amp; Write</code>.<br>
+      <span style="font-size:11px;color:var(--text3)">Repositório: Alexandre107201/financeiro &middot; Arquivo: dados.json</span>
+    </div>
+    <input id="gh-token-inp" class="modal-inp" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+      onkeydown="if(event.key==='Enter')App.saveGHToken()">
+    <div id="gh-modal-status" style="font-size:11px;text-align:center;margin-bottom:12px;min-height:16px"></div>
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="App.closeModal('github')">Fechar</button>
+      <button class="modal-save" onclick="App.saveGHToken()">Salvar token</button>
+    </div>
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+      <button class="btn btn-ghost" style="width:100%" onclick="GitHub.loadRemote(true)">&#x2193; Baixar dados do GitHub agora</button>
+      <button class="btn btn-ghost" style="width:100%" onclick="GitHub.save(true)">&#x2191; Enviar dados ao GitHub agora</button>
+      <button class="btn" style="background:var(--red);color:#fff;width:100%;font-size:12px;padding:10px"
+        onclick="if(confirm('Remover token salvo?')){Store.set('gh_token','');document.getElementById('gh-token-inp').value='';App.updateGHIcon();}">
+        &#x1F5D1; Remover token
+      </button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
