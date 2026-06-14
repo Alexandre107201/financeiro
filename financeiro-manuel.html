@@ -824,6 +824,12 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
       <button class="add-btn" onclick="App.addCategory()">+</button>
     </div>
   </div>
+  <div class="sec-title" style="margin-top:24px">🤖 Inteligência Artificial</div>
+  <div class="card" style="margin-bottom:12px">
+    <div id="cfg-ai-status" style="font-size:12px;margin-bottom:10px"></div>
+    <input type="password" id="cfg-ai-key" placeholder="Cole sua Anthropic API Key (sk-ant-...)" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:13px;box-sizing:border-box;margin-bottom:8px">
+    <button class="btn btn-ghost" style="width:100%" onclick="App.saveAIKey()">💾 Salvar chave API</button>
+  </div>
   <div class="sec-title" style="margin-top:24px">&#x2601; GitHub Sync</div>
   <div class="card" style="margin-bottom:12px">
     <div id="cfg-gh-status" style="font-size:12px;margin-bottom:10px"></div>
@@ -1419,10 +1425,20 @@ const Parsers = {
    AI — Anthropic API calls
 ================================================================ */
 const AI = {
+  getKey() { return Store.get('anthropic_key', ''); },
+  setKey(k) { Store.set('anthropic_key', k.trim()); },
+
   async call(messages, maxTokens = 600) {
+    const key = this.getKey();
+    if (!key) throw new Error('Chave API não configurada. Acesse CONFIG → IA para adicionar.');
     const resp = await fetch(PROXY, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
       body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages }),
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -3049,6 +3065,12 @@ const App = {
 
     const stats = document.getElementById('cfg-stats');
     if (stats) stats.textContent = `${Data.entries.length} lançamentos · ${Object.keys(Data.cats).length} categorias`;
+    const aiStatus = document.getElementById('cfg-ai-status');
+    if (aiStatus) {
+      const hasKey = !!AI.getKey();
+      aiStatus.textContent = hasKey ? '✓ Chave API configurada — IA ativa' : '⚠ Sem chave API — lançamento por voz/IA desativado';
+      aiStatus.style.color = hasKey ? 'var(--green)' : 'var(--orange)';
+    }
     const ghStatus = document.getElementById('cfg-gh-status');
     if (ghStatus) {
       const hasToken = !!GitHub.getToken();
@@ -3392,6 +3414,16 @@ const App = {
     const s = document.getElementById('gh-modal-status');
     if (s) s.textContent = '';
     this.openModal('github');
+  },
+
+  saveAIKey() {
+    const inp = document.getElementById('cfg-ai-key');
+    const val = (inp ? inp.value : '').trim();
+    if (!val) return;
+    AI.setKey(val);
+    if (inp) inp.value = '';
+    this.renderConfig();
+    alert('Chave API salva! A IA já está disponível.');
   },
 
   saveGHToken() {
