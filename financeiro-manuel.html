@@ -1699,6 +1699,45 @@ const GitHub = {
       const remote = JSON.parse(jsonStr);
       if (!remote.entries || !Array.isArray(remote.entries)) return;
 
+      // Merge categorias (aditivo — nunca remove categorias locais)
+      if (remote.cats && typeof remote.cats === 'object') {
+        let catsChanged = false;
+        for (const [cat, subs] of Object.entries(remote.cats)) {
+          if (!Data.cats[cat]) {
+            Data.cats[cat] = Array.isArray(subs) ? [...subs] : [];
+            catsChanged = true;
+          } else {
+            const existing = new Set(Data.cats[cat]);
+            for (const sub of (subs || [])) {
+              if (!existing.has(sub)) { Data.cats[cat].push(sub); existing.add(sub); catsChanged = true; }
+            }
+          }
+        }
+        if (catsChanged) Store.set('cats', Data.cats);
+      }
+
+      // Merge budgets (remoto vence se existir)
+      if (remote.budgets && typeof remote.budgets === 'object') {
+        Data.budgets = Object.assign({}, remote.budgets, Data.budgets);
+        Store.set('budgets', Data.budgets);
+      }
+
+      // Merge assets (remoto vence se existir)
+      if (remote.assets && typeof remote.assets === 'object') {
+        Data.assets = Object.assign({}, remote.assets, Data.assets);
+        Store.set('assets', Data.assets);
+      }
+
+      // Merge compromissos (aditivo por nome)
+      if (Array.isArray(remote.compromissos)) {
+        const localNames = new Set((Data.compromissos || []).map(c => c.nome));
+        for (const c of remote.compromissos) {
+          if (!localNames.has(c.nome)) { (Data.compromissos = Data.compromissos || []).push(c); localNames.add(c.nome); }
+        }
+        Store.set('compromissos', Data.compromissos);
+      }
+
+      // Merge lançamentos
       const existingKeys = new Set(Data.entries.map(e => Data.dedupKey(e)));
       let added = 0;
       for (const e of remote.entries) {
@@ -1712,8 +1751,8 @@ const GitHub = {
       if (added > 0) {
         Data.entries.sort((a, b) => b.date.localeCompare(a.date));
         Data.saveEntries();
-        App.renderView(State.curView);
       }
+      App.renderView(State.curView);
       const msg = added > 0 ? `+${added} lançamentos do GitHub` : 'Dados atualizados';
       this._status(msg, 'ok');
       if (manual) this._status(msg, 'ok', 'modal');
