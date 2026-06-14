@@ -1644,7 +1644,6 @@ const GitHub = {
     const t = this.getToken();
     if (t) h['Authorization'] = 'Bearer ' + t;
     return h; // Authorization só incluído se token existir — GET funciona sem token em repo público
-    };
   },
 
   async _getFileMeta() {
