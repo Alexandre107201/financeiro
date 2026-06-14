@@ -2239,13 +2239,15 @@ const App = {
 
     const subEl = document.getElementById('list-subtotal');
     if (q) {
+      // Busca dentro do mês selecionado (mês continua visível)
       entries = Data.entries.filter(e =>
-        (e.note || '').toLowerCase().includes(q) ||
-        e.category.toLowerCase().includes(q) ||
-        (e.subcategory || '').toLowerCase().includes(q) ||
-        String(e.value).includes(q.replace(',', '.'))
-      ).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 300);
-      document.getElementById('list-month-nav').style.display = 'none';
+        monthKey(e.date) === State.fMonth &&
+        ((e.note || '').toLowerCase().includes(q) ||
+         e.category.toLowerCase().includes(q) ||
+         (e.subcategory || '').toLowerCase().includes(q) ||
+         String(e.value).includes(q.replace(',', '.')))
+      ).sort((a, b) => b.date.localeCompare(a.date));
+      document.getElementById('list-month-nav').style.display = '';
 
       // Subtotal
       const tIn  = entries.filter(e => e.type === 'entrada').reduce((s, e) => s + e.value, 0);
@@ -2257,7 +2259,7 @@ const App = {
       const balEl = document.getElementById('list-sub-bal');
       balEl.textContent  = 'Saldo ' + (bal >= 0 ? '+' : '') + fBRL(bal);
       balEl.style.color  = bal >= 0 ? 'var(--green)' : 'var(--red)';
-      subEl.style.display = 'flex';
+      subEl.style.display = entries.length > 0 ? 'flex' : 'none';
     } else {
       entries = Data.entries
         .filter(e => monthKey(e.date) === State.fMonth)
