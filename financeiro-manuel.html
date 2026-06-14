@@ -835,6 +835,16 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
     <div id="cfg-gh-status" style="font-size:12px;margin-bottom:10px"></div>
     <button class="btn btn-ghost" style="width:100%" onclick="App.openGHConfig()">&#x1F511; Configurar / ver token</button>
   </div>
+  <div class="sec-title" style="margin-top:24px">📱 Transferir para outro dispositivo</div>
+  <div class="card" style="margin-bottom:12px">
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Gera um link com suas chaves para abrir no celular — as configurações são salvas automaticamente.</div>
+    <button class="btn btn-ghost" style="width:100%" onclick="App.gerarLinkCelular()">🔗 Gerar link para celular</button>
+    <div id="cfg-link-output" style="margin-top:10px;display:none">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px">Abra este link no celular (expira ao fechar esta aba):</div>
+      <textarea id="cfg-link-text" readonly style="width:100%;font-size:10px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text);box-sizing:border-box;height:60px;resize:none" onclick="this.select()"></textarea>
+      <button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="navigator.clipboard.writeText(document.getElementById('cfg-link-text').value).then(()=>alert('Link copiado!'))">📋 Copiar link</button>
+    </div>
+  </div>
   <div class="sec-title" style="margin-top:24px">Dados & Backup</div>
   <div class="card">
     <div style="display:flex;flex-direction:column;gap:8px">
@@ -1857,6 +1867,17 @@ const App = {
       document.body.classList.add('dark');
       document.getElementById('dark-btn').textContent = '☀️';
     }
+    // Importar config via link (hash #cfg=...)
+    try {
+      const hash = location.hash;
+      if (hash.startsWith('#cfg=')) {
+        const cfg = JSON.parse(decodeURIComponent(escape(atob(hash.slice(5)))));
+        if (cfg.ak) AI.setKey(cfg.ak);
+        if (cfg.gt) GitHub.setToken(cfg.gt);
+        history.replaceState(null, '', location.pathname); // limpa o hash da URL
+        if (cfg.ak || cfg.gt) setTimeout(() => alert('✅ Configurações importadas com sucesso!'), 500);
+      }
+    } catch(e) {}
     this.navigate('dashboard');
     GitHub.loadRemote();
     this.updateGHIcon();
@@ -3453,6 +3474,21 @@ const App = {
     const s = document.getElementById('gh-modal-status');
     if (s) s.textContent = '';
     this.openModal('github');
+  },
+
+  gerarLinkCelular() {
+    const aiKey = AI.getKey();
+    const ghToken = GitHub.getToken();
+    if (!aiKey && !ghToken) { alert('Nenhuma chave configurada ainda.'); return; }
+    const cfg = {};
+    if (aiKey) cfg.ak = aiKey;
+    if (ghToken) cfg.gt = ghToken;
+    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(cfg))));
+    const url = location.origin + location.pathname + '#cfg=' + encoded;
+    const out = document.getElementById('cfg-link-output');
+    const txt = document.getElementById('cfg-link-text');
+    if (out) out.style.display = 'block';
+    if (txt) txt.value = url;
   },
 
   saveAIKey() {
