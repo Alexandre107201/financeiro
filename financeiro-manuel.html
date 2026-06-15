@@ -535,41 +535,6 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
 #gh-btn.ok      { color: var(--green); }
 #gh-btn.err     { color: var(--red); }
 
-/* ================================================================
-   FEATURE ADDITIONS v2
-================================================================ */
-/* Alerts */
-.dash-alert { background:var(--surface); border:1.5px solid var(--border); border-radius:var(--radius); padding:10px 14px; margin-bottom:8px; font-size:12px; display:flex; align-items:flex-start; gap:10px; }
-.dash-alert.warn  { border-left:4px solid var(--orange); }
-.dash-alert.danger{ border-left:4px solid var(--red);    }
-.dash-alert.ok    { border-left:4px solid var(--green);  }
-.dash-alert.info  { border-left:4px solid var(--purple); }
-.dash-alert-icon  { font-size:18px; flex-shrink:0; }
-.dash-alert-body  { flex:1; }
-.dash-alert-title { font-weight:700; font-size:12px; color:var(--text); }
-.dash-alert-desc  { font-size:11px; color:var(--text2); margin-top:2px; line-height:1.4; }
-/* Airbnb panel */
-.airbnb-kpi { background:var(--surface); border:1.5px solid var(--border); border-radius:var(--radius); padding:14px 16px; margin-bottom:8px; }
-.airbnb-month-row { display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; }
-.airbnb-month-row:last-child { border-bottom:none; }
-.airbnb-occ-bar { height:6px; border-radius:3px; background:var(--bg2); margin-top:4px; overflow:hidden; }
-.airbnb-occ-fill { height:100%; background:var(--purple); border-radius:3px; transition:width .4s; }
-/* Entity filter */
-.entity-pills { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
-.entity-pill { padding:5px 12px; border-radius:20px; border:1.5px solid var(--border); font-size:11px; font-weight:600; cursor:pointer; transition:all .15s; color:var(--text2); background:var(--surface); }
-.entity-pill.active { background:var(--text); color:var(--bg); border-color:var(--text); }
-/* Bank filter */
-.bank-filter-row { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; margin-bottom:10px; padding-bottom:2px; }
-.bank-chip { padding:4px 11px; border-radius:16px; border:1.5px solid var(--border); font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap; color:var(--text2); background:var(--surface); transition:all .15s; }
-.bank-chip.active { background:var(--text); color:var(--bg); border-color:var(--text); }
-/* Projection row */
-.proj-row { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; }
-.proj-row:last-child { border-bottom:none; }
-.proj-balance { font-family:Syne,sans-serif; font-weight:800; font-size:13px; }
-/* Net worth evolution */
-.nw-evo-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:12px; }
-.nw-evo-row:last-child { border-bottom:none; }
-
 </style>
 </head>
 <body>
@@ -604,7 +569,6 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
   <button class="nav-btn" data-view="forecast">🔮 Fluxo</button>
   <button class="nav-btn" data-view="analytics">📈 Análise</button>
   <button class="nav-btn" data-view="networth">💎 Patrimônio</button>
-  <button class="nav-btn" data-view="airbnb">🏖 Airbnb</button>
   <button class="nav-btn" data-view="import">📥 Importar</button>
   <button class="nav-btn" data-view="config">⚙ Config</button>
 </div>
@@ -664,13 +628,12 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
 ================================================================ -->
 <div id="view-list" class="view">
   <input id="list-search" class="inp" type="text" placeholder="🔍 Buscar descrição, valor, categoria..." oninput="App.renderList()" style="margin-bottom:8px">
-  <div class="bank-filter-row" id="bank-filter-row"></div>
   <div id="list-subtotal" style="display:none;background:var(--card);border-radius:12px;padding:10px 14px;margin-bottom:10px;display:none;gap:12px;flex-wrap:wrap;align-items:center;font-size:13px">
     <span id="list-sub-count" style="color:var(--text2)"></span>
     <span style="flex:1"></span>
     <span id="list-sub-in" style="color:var(--green);font-weight:700"></span>
     <span id="list-sub-out" style="color:var(--red);font-weight:700"></span>
-    <span id="list-sub-bal" style="font-weight:700;font-family:Syne,sans-serif"></span>
+    <span id="list-sub-bal" style="font-weight:700;font-family:'Syne',sans-serif"></span>
   </div>
   <div id="list-month-nav" class="month-nav">
     <button class="month-nav-arrow" onclick="App.shiftMonth('list',-1)">‹</button>
@@ -687,13 +650,6 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
      VIEW: SUMMARY (Resumo)
 ================================================================ -->
 <div id="view-summary" class="view">
-  <div class="entity-pills" id="entity-pills">
-    <div class="entity-pill active" onclick="App.setEntity('all')" data-entity="all">Todos</div>
-    <div class="entity-pill" onclick="App.setEntity('pessoal')" data-entity="pessoal">👤 Pessoal</div>
-    <div class="entity-pill" onclick="App.setEntity('vilafit')" data-entity="vilafit">🏋 Vila Fit</div>
-    <div class="entity-pill" onclick="App.setEntity('vilagourmet')" data-entity="vilagourmet">🍽 Vila Gourmet</div>
-    <div class="entity-pill" onclick="App.setEntity('maac')" data-entity="maac">🏗 MAAC</div>
-  </div>
   <div id="sum-month-nav" class="month-nav">
     <button class="month-nav-arrow" onclick="App.shiftMonth('summary',-1)">‹</button>
     <div class="month-nav-label" onclick="App.openMonthPicker('summary')">
@@ -841,13 +797,6 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
 </div>
 
 <!-- ================================================================
-     VIEW: AIRBNB
-================================================================ -->
-<div id="view-airbnb" class="view">
-  <div id="airbnb-content"></div>
-</div>
-
-<!-- ================================================================
      VIEW: IMPORT
 ================================================================ -->
 <div id="view-import" class="view">
@@ -908,7 +857,6 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
     <div style="display:flex;flex-direction:column;gap:8px">
       <button class="btn btn-ghost" onclick="App.exportCSV()" style="width:100%">⬇ Exportar CSV</button>
       <button class="btn btn-ghost" onclick="App.exportJSON()" style="width:100%">⬇ Exportar JSON (backup)</button>
-      <button class="btn btn-ghost" onclick="App.generatePDF()" style="width:100%">📄 Relatório PDF do mês</button>
       <button class="btn btn-ghost" style="width:100%" onclick="App.runFixConsorciosBtn()">🔧 Corrigir consórcios por valor</button>
       <button class="btn btn-ghost" style="width:100%" onclick="App.runFixCemigBtn()">⚡ Corrigir CEMIG por descrição</button>
       <button class="btn btn-ghost" style="width:100%" onclick="App.runRemoveDupBtn()">🧹 Remover duplicatas</button>
@@ -1906,8 +1854,6 @@ const State = {
   importBuffer: [],
   recognition: null,
   isListening: false,
-  selEntity: 'all',
-  selBank: 'all',
 };
 
 /* ================================================================
@@ -2014,7 +1960,6 @@ const App = {
       budget:    () => this.renderBudget(),
       forecast:  () => this.renderForecast(),
       networth:      () => this.renderNetworth(),
-      airbnb:        () => this.renderAirbnb(),
       compromissos:  () => this.renderCompromissos(),
       config:        () => this.renderConfig(),
     };
@@ -2288,10 +2233,8 @@ const App = {
   // ---- HISTORY (LIST) ----
   renderList() {
     this.updateMonthNav('list');
-    this.renderBankFilter();
     const q = (document.getElementById('list-search')?.value || '').toLowerCase().trim();
     const el = document.getElementById('list-entries');
-    const selBank = State.selBank || 'all';
     let entries;
 
     const subEl = document.getElementById('list-subtotal');
@@ -2299,7 +2242,6 @@ const App = {
       // Busca dentro do mês selecionado (mês continua visível)
       entries = Data.entries.filter(e =>
         monthKey(e.date) === State.fMonth &&
-        (selBank === 'all' || this.detectBank(e.note) === selBank) &&
         ((e.note || '').toLowerCase().includes(q) ||
          e.category.toLowerCase().includes(q) ||
          (e.subcategory || '').toLowerCase().includes(q) ||
@@ -2320,8 +2262,7 @@ const App = {
       subEl.style.display = entries.length > 0 ? 'flex' : 'none';
     } else {
       entries = Data.entries
-        .filter(e => monthKey(e.date) === State.fMonth &&
-                     (selBank === 'all' || this.detectBank(e.note) === selBank))
+        .filter(e => monthKey(e.date) === State.fMonth)
         .sort((a, b) => b.date.localeCompare(a.date));
       document.getElementById('list-month-nav').style.display = '';
       subEl.style.display = 'none';
@@ -2346,21 +2287,10 @@ const App = {
     </div>`;
   },
 
-  // ---- ENTITY FILTER ----
-  setEntity(ent) {
-    State.selEntity = ent;
-    document.querySelectorAll('[data-entity]').forEach(el => {
-      el.classList.toggle('active', el.dataset.entity === ent);
-    });
-    this.renderSummary();
-  },
-
   // ---- SUMMARY ----
   renderSummary() {
     this.updateMonthNav('summary');
-    let me = Data.entries.filter(e => monthKey(e.date) === State.fMonth);
-    const ent = State.selEntity || 'all';
-    if (ent !== 'all') me = me.filter(e => this.detectEntity(e) === ent);
+    const me = Data.entries.filter(e => monthKey(e.date) === State.fMonth);
     const tIn  = me.filter(e => e.type === 'entrada').reduce((s, e) => s + e.value, 0);
     const tOut = me.filter(e => e.type === 'saida').reduce((s, e) => s + e.value, 0);
     const bal  = tIn - tOut;
@@ -2390,7 +2320,7 @@ const App = {
         const subHtml = open ? Object.entries(d.subs).map(([s, v]) =>
           `<div class="cat-sub-row">
             <span style="color:var(--text2)">${s}</span>
-            <span style="font-family:Syne,sans-serif;font-weight:700;color:${v >= 0 ? 'var(--green)' : 'var(--red)'}">${v >= 0 ? '+' : ''}${fBRL(v)}</span>
+            <span style="font-family:'Syne',sans-serif;font-weight:700;color:${v >= 0 ? 'var(--green)' : 'var(--red)'}">${v >= 0 ? '+' : ''}${fBRL(v)}</span>
           </div>`
         ).join('') : '';
         return `<div class="cat-row-wrap">
@@ -2399,7 +2329,7 @@ const App = {
               <div style="font-size:13px;font-weight:500">${cat}</div>
               <div style="font-size:10px;color:var(--text3);margin-top:2px">${d.count} lançamento${d.count !== 1 ? 's' : ''}</div>
             </div>
-            <div style="font-family:Syne,sans-serif;font-weight:800;font-size:15px;color:${d.total >= 0 ? 'var(--green)' : 'var(--red)'}">${d.total >= 0 ? '+' : ''}${fBRL(d.total)}</div>
+            <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:15px;color:${d.total >= 0 ? 'var(--green)' : 'var(--red)'}">${d.total >= 0 ? '+' : ''}${fBRL(d.total)}</div>
           </div>
           ${open ? `<div class="cat-row-detail">${subHtml}</div>` : ''}
         </div>`;
@@ -2457,10 +2387,7 @@ const App = {
     const outSeries = months.map(m => Data.sumMonth(m, 'saida'));
     const incSeries = months.map(m => Data.sumMonth(m, 'entrada'));
 
-    // ── Alertas Inteligentes ──
-    const alertsHtml = this.buildDashAlerts(mk, out, inc, outPrev, incPrev);
-
-    el.innerHTML = alertsHtml + `
+    el.innerHTML = `
       <div class="kpi-grid">
         <div class="kpi">
           <div class="kpi-lbl">Saídas no mês</div>
@@ -2520,9 +2447,7 @@ const App = {
             </div>
             <div style="font-weight:600">${fBRL(r.avg)}/mês</div>
           </div>`).join('') || '<div class="empty" style="padding:20px">Lance 2+ meses para detectar recorrências</div>'}
-      </div>
-      ${this.buildBankSummaryCard(mk)}
-      ${this.buildEntitySummaryCard(mk)}`;
+      </div>`;
 
     // Sparklines
     requestAnimationFrame(() => {
@@ -2565,214 +2490,6 @@ const App = {
         }).join('')}
       </div>`;
   },
-
-  // ================================================================
-  //  FEATURE ADDITIONS v2
-  // ================================================================
-
-  detectBank(note) {
-    const n = (note || '').toUpperCase();
-    if (/\bBB\b|BANCO DO BRASIL|BB CONSORCIO|BB CRED/.test(n)) return 'Banco do Brasil';
-    if (/ITAU|ITA\u00DA|IUPP|HIPERCARD/.test(n)) return 'Ita\u00FA';
-    if (/BRADESCO|NEXT\b|BRADESCARD/.test(n)) return 'Bradesco';
-    if (/NUBANK|NU\.COM|NUPAY/.test(n)) return 'Nubank';
-    if (/INTER\b|BANCO INTER|BINTER/.test(n)) return 'Inter';
-    if (/SANTANDER|SUPERDIGITAL/.test(n)) return 'Santander';
-    if (/CAIXA|CEF\b|CAIXA ECON/.test(n)) return 'Caixa';
-    if (/C6 BANK|C6BANK/.test(n)) return 'C6 Bank';
-    if (/PIC PAY|PICPAY/.test(n)) return 'PicPay';
-    if (/MERCADO PAGO|MERCADOPAGO/.test(n)) return 'Mercado Pago';
-    if (/PAGSEGURO|PAGBANK/.test(n)) return 'PagBank';
-    return 'Outros';
-  },
-
-  detectEntity(e) {
-    const cat = (e.category || '').toUpperCase();
-    const note = (e.note || '').toUpperCase();
-    if (/VILA FIT|VILAFIT/.test(cat + note)) return 'vilafit';
-    if (/VILA GOURMET|VILAGOURMET/.test(cat + note)) return 'vilagourmet';
-    if (/\bMAAC\b/.test(cat + note)) return 'maac';
-    if (/\uD83C\uDFCB/.test(cat)) return 'vilafit';
-    if (/\uD83C\uDF7D/.test(cat)) return 'vilagourmet';
-    if (/\uD83C\uDFD7/.test(cat)) return 'maac';
-    return 'pessoal';
-  },
-
-  buildDashAlerts(mk, out, inc, outPrev, incPrev) {
-    const alerts = [];
-    const months = Data.lastNMonths(4);
-    if (out > 0 && out > inc * 1.05) {
-      alerts.push({ type: 'danger', icon: '\uD83D\uDD34', title: 'Sa\u00EDdas superam entradas em ' + fBRL(out - inc), desc: 'Este m\u00EAs: Sa\u00EDdas ' + fBRL(out) + ' vs Entradas ' + fBRL(inc) });
-    }
-    if (outPrev > 0 && out > outPrev * 1.25) {
-      const pct = Math.round((out / outPrev - 1) * 100);
-      alerts.push({ type: 'warn', icon: '\uD83D\uDCC8', title: 'Gastos ' + pct + '% maiores que o m\u00EAs anterior', desc: 'Anterior: ' + fBRL(outPrev) + ' \u2192 Atual: ' + fBRL(out) });
-    }
-    if (inc === 0 && out > 0) {
-      alerts.push({ type: 'warn', icon: '\u26A0\uFE0F', title: 'Nenhuma entrada registrada neste m\u00EAs', desc: 'Verifique se todas as receitas foram lan\u00E7adas.' });
-    }
-    const catOut = {}, catHistory = {};
-    months.forEach((m, idx) => {
-      Data.entries.filter(e => e.type === 'saida' && monthKey(e.date) === m).forEach(e => {
-        if (idx === 0) catOut[e.category] = (catOut[e.category] || 0) + e.value;
-        else { if (!catHistory[e.category]) catHistory[e.category] = []; catHistory[e.category].push(e.value); }
-      });
-    });
-    Object.entries(catOut).forEach(([cat, val]) => {
-      const hist = catHistory[cat];
-      if (!hist || !hist.length) return;
-      const avg = hist.reduce((a, b) => a + b, 0) / hist.length;
-      if (avg > 100 && val > avg * 1.5) {
-        alerts.push({ type: 'warn', icon: '\uD83D\uDD3A', title: cat + ' com gasto at\u00EDpico', desc: fBRL(val) + ' este m\u00EAs vs m\u00E9dia de ' + fBRL(avg) });
-      }
-    });
-    if (!alerts.length) {
-      const bal = inc - out;
-      if (bal > 0) alerts.push({ type: 'ok', icon: '\u2705', title: 'M\u00EAs saud\u00E1vel \u2014 saldo positivo de ' + fBRL(bal), desc: 'Continue assim!' });
-    }
-    if (!alerts.length) return '';
-    return '<div style="margin-bottom:12px"><div class="sec-title" style="margin-top:0">\uD83D\uDD14 Alertas</div>' +
-      alerts.map(a => '<div class="dash-alert ' + a.type + '"><div class="dash-alert-icon">' + a.icon + '</div><div class="dash-alert-body"><div class="dash-alert-title">' + a.title + '</div>' + (a.desc ? '<div class="dash-alert-desc">' + a.desc + '</div>' : '') + '</div></div>').join('') + '</div>';
-  },
-
-  buildBankSummaryCard(mk) {
-    const me = Data.entries.filter(e => monthKey(e.date) === mk && e.type === 'saida');
-    if (!me.length) return '';
-    const banks = {};
-    me.forEach(e => { const b = this.detectBank(e.note); banks[b] = (banks[b] || 0) + e.value; });
-    const sorted = Object.entries(banks).sort((a,b) => b[1]-a[1]);
-    const total = sorted.reduce((s,[,v]) => s+v, 0);
-    return '<div class="chart-card"><div class="sec-title" style="margin-top:0">\uD83C\uDFE6 Sa\u00EDdas por banco/cart\u00E3o</div>' +
-      sorted.map(([b, v]) => {
-        const pct = Math.round(v/total*100);
-        return '<div class="mom-row"><span class="mom-cat">' + b + '</span><span style="font-size:11px;color:var(--text2)">' + pct + '%</span><span class="mom-delta" style="color:var(--red)">' + fBRL(v) + '</span></div>';
-      }).join('') + '</div>';
-  },
-
-  buildEntitySummaryCard(mk) {
-    const me = Data.entries.filter(e => monthKey(e.date) === mk);
-    if (!me.length) return '';
-    const ents = { pessoal: {in:0,out:0}, vilafit: {in:0,out:0}, vilagourmet: {in:0,out:0}, maac: {in:0,out:0} };
-    const labels = { pessoal:'\uD83D\uDC64 Pessoal', vilafit:'\uD83C\uDFCB Vila Fit', vilagourmet:'\uD83C\uDF7D Vila Gourmet', maac:'\uD83C\uDFD7 MAAC' };
-    me.forEach(e => { const ent = this.detectEntity(e); if (ents[ent]) ents[ent][e.type === 'entrada' ? 'in' : 'out'] += e.value; });
-    const rows = Object.entries(ents).filter(([, v]) => v.in + v.out > 0);
-    if (!rows.length) return '';
-    return '<div class="chart-card"><div class="sec-title" style="margin-top:0">\uD83C\uDFE2 Resumo por entidade</div>' +
-      rows.map(([k, v]) => {
-        const bal = v.in - v.out;
-        return '<div class="mom-row"><span class="mom-cat">' + labels[k] + '</span><span style="font-size:11px;color:var(--text2)">' + fmtK(v.out) + '</span><span class="mom-delta" style="color:' + (bal >= 0 ? 'var(--green)' : 'var(--red)') + '">' + (bal >= 0 ? '+' : '') + fmtK(bal) + '</span></div>';
-      }).join('') + '</div>';
-  },
-
-  renderBankFilter() {
-    const row = document.getElementById('bank-filter-row');
-    if (!row) return;
-    const banks = { 'all': 'Todos' };
-    Data.entries.filter(e => monthKey(e.date) === State.fMonth).forEach(e => {
-      const b = this.detectBank(e.note);
-      if (!banks[b]) banks[b] = b;
-    });
-    const sel = State.selBank || 'all';
-    row.innerHTML = Object.entries(banks).map(([k, label]) =>
-      '<div class="bank-chip ' + (k === sel ? 'active' : '') + '" onclick="App.setBank(' + JSON.stringify(k) + ')">' + label + '</div>'
-    ).join('');
-  },
-
-  setBank(bank) {
-    State.selBank = bank;
-    this.renderList();
-  },
-
-  buildProjecao90(todayMk) {
-    const allMonths = Data.getMonths();
-    const pastMonths = allMonths.filter(m => m < todayMk).slice(0, 6);
-    if (pastMonths.length < 2) return '';
-    const avgOut = pastMonths.reduce((s,m) => s + Data.sumMonth(m,'saida'), 0) / pastMonths.length;
-    const avgIn  = pastMonths.reduce((s,m) => s + Data.sumMonth(m,'entrada'), 0) / pastMonths.length;
-    const next3 = [];
-    const [cy, cm] = todayMk.split('-').map(Number);
-    for (let i = 0; i < 3; i++) {
-      const nd = new Date(cy, cm - 1 + i, 1);
-      next3.push(nd.toISOString().slice(0, 7));
-    }
-    const commitedOut = Data.compromissos.filter(c => c.ativo).reduce((s,c) => s+c.valor, 0);
-    const projOut = Math.max(avgOut, commitedOut);
-    let out = '<div class="chart-card" style="margin-bottom:12px"><div class="sec-title" style="margin-top:0">\uD83D\uDD2E Proje\u00E7\u00E3o de Caixa \u2014 pr\u00F3ximos 90 dias</div><div style="font-size:10px;color:var(--text3);margin-bottom:12px">Baseada na m\u00E9dia dos \u00FAltimos ' + pastMonths.length + ' meses. Comprometido fixo: ' + fBRL(commitedOut) + '/m\u00EAs</div>';
-    let cumBal = 0;
-    next3.forEach((mk, i) => {
-      const realOut = Data.sumMonth(mk, 'saida');
-      const realIn  = Data.sumMonth(mk, 'entrada');
-      const estOut  = realOut > 0 ? realOut : (i === 0 ? projOut : avgOut);
-      const estIn   = realIn  > 0 ? realIn  : avgIn;
-      const bal     = estIn - estOut;
-      cumBal += bal;
-      const isReal  = realOut > 0 || realIn > 0;
-      out += '<div class="proj-row"><div><div style="font-size:12px;font-weight:600">' + formatMonthLabel(mk) + ' ' + (isReal ? '<span style="font-size:9px;color:var(--green)">\u2713 REAL</span>' : '<span style="font-size:9px;color:var(--text3)">ESTIMADO</span>') + '</div><div style="font-size:10px;color:var(--text3);margin-top:2px">Entrada ' + fmtK(estIn) + ' \u00B7 Sa\u00EDda ' + fmtK(estOut) + '</div></div><div style="text-align:right"><div class="proj-balance" style="color:' + (bal>=0?'var(--green)':'var(--red)') + '">' + (bal>=0?'+':'') + fBRL(bal) + '</div><div style="font-size:10px;color:var(--text3)">acum. ' + (cumBal>=0?'+':'') + fmtK(cumBal) + '</div></div></div>';
-    });
-    out += '</div>';
-    return out;
-  },
-
-  renderAirbnb() {
-    const el = document.getElementById('airbnb-content');
-    if (!el) return;
-    const airbnbEntries = Data.entries.filter(e =>
-      e.type === 'entrada' &&
-      /airbnb|universit[\u00E1a]|hospedagem|aluguel temporario|locacao temp/i.test((e.note || '') + (e.subcategory || '') + (e.category || ''))
-    );
-    if (!airbnbEntries.length) {
-      el.innerHTML = '<div class="airbnb-kpi" style="text-align:center;padding:30px"><div style="font-size:32px;margin-bottom:10px">\uD83C\uDFD6</div><div style="font-weight:700;font-size:16px;margin-bottom:6px">Painel Airbnb</div><div style="font-size:12px;color:var(--text2)">Nenhuma entrada Airbnb detectada ainda.<br>Lance receitas com "Airbnb" ou "Universit\u00E1" na obs ou subcategoria.</div></div>';
-      return;
-    }
-    const totalReceita = airbnbEntries.reduce((s,e) => s+e.value, 0);
-    const avgMensal    = totalReceita / (new Set(airbnbEntries.map(e => monthKey(e.date))).size || 1);
-    const byMonth = {};
-    airbnbEntries.forEach(e => { const mk = monthKey(e.date); if (!byMonth[mk]) byMonth[mk] = 0; byMonth[mk] += e.value; });
-    const abMonths = Object.keys(byMonth).sort().reverse();
-    const maxVal = Math.max(...Object.values(byMonth), 1);
-    let out = '<div class="kpi-grid" style="margin-bottom:12px"><div class="kpi"><div class="kpi-lbl">Receita total</div><div class="kpi-val" style="color:var(--purple)">' + fmtK(totalReceita) + '</div><div class="kpi-trend">' + airbnbEntries.length + ' reservas</div></div><div class="kpi"><div class="kpi-lbl">M\u00E9dia mensal</div><div class="kpi-val" style="color:var(--green)">' + fmtK(avgMensal) + '</div><div class="kpi-trend">' + abMonths.length + ' meses</div></div></div>';
-    out += '<div class="chart-card"><div class="sec-title" style="margin-top:0">\uD83D\uDCC5 Receita por m\u00EAs</div>' +
-      abMonths.map(mk => {
-        const v = byMonth[mk];
-        const pct = Math.round(v/maxVal*100);
-        return '<div class="airbnb-month-row"><div><div style="font-size:12px;font-weight:600">' + formatMonthLabel(mk) + '</div><div class="airbnb-occ-bar" style="width:120px"><div class="airbnb-occ-fill" style="width:' + pct + '%"></div></div></div><div style="font-family:Syne,sans-serif;font-weight:800;color:var(--purple)">' + fBRL(v) + '</div></div>';
-      }).join('') + '</div>';
-    out += '<div class="chart-card"><div class="sec-title" style="margin-top:0">\uD83D\uDCCB \u00DAltimas receitas</div>' +
-      airbnbEntries.slice(-10).reverse().map(e =>
-        '<div class="rec-row"><div><div style="font-size:12px">' + (e.note || e.subcategory || 'Airbnb') + '</div><div class="rec-meta">' + e.date.split('-').reverse().join('/') + ' \u00B7 ' + e.category + '</div></div><div style="font-weight:700;color:var(--purple)">+' + fBRL(e.value) + '</div></div>'
-      ).join('') + '</div>';
-    el.innerHTML = out;
-  },
-
-  generatePDF() {
-    const mk = State.fMonth;
-    const me = Data.entries.filter(e => monthKey(e.date) === mk);
-    const tIn  = me.filter(e => e.type === 'entrada').reduce((s,e) => s+e.value, 0);
-    const tOut = me.filter(e => e.type === 'saida').reduce((s,e) => s+e.value, 0);
-    const bal  = tIn - tOut;
-    const byCat = {};
-    me.filter(e => e.type === 'saida').forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + e.value; });
-    const sortedCat = Object.entries(byCat).sort((a,b) => b[1]-a[1]);
-    const htmDoc = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relat\u00F3rio ' + formatMonthLabel(mk) + '</title><style>body{font-family:Arial,sans-serif;color:#1a1a22;background:#fff;padding:20mm;font-size:12px}h1{font-size:22px;margin-bottom:4px}h2{font-size:14px;border-bottom:2px solid #1a1a22;padding-bottom:4px;margin-top:20px}.kpis{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:16px 0}.kpi{border:1px solid #e0e0e0;border-radius:8px;padding:12px;text-align:center}.kpi-lbl{font-size:10px;color:#888;text-transform:uppercase}.kpi-val{font-size:20px;font-weight:700;margin-top:4px}table{width:100%;border-collapse:collapse;margin-top:8px}th{text-align:left;font-size:10px;color:#888;border-bottom:2px solid #1a1a22;padding:6px 4px;text-transform:uppercase}td{padding:8px 4px;border-bottom:1px solid #f0f0f0;font-size:11px}.vr{color:#ff4757;font-weight:700}.vg{color:#2ed573;font-weight:700}.ft{margin-top:30px;font-size:10px;color:#aaa;text-align:center}</style></head><body>' +
-      '<h1>Relat\u00F3rio Financeiro</h1><div style="color:#888;font-size:11px">' + formatMonthLabel(mk) + ' \u00B7 Gerado em ' + new Date().toLocaleDateString('pt-BR') + '</div>' +
-      '<div class="kpis"><div class="kpi"><div class="kpi-lbl">Entradas</div><div class="kpi-val" style="color:#2ed573">+' + fBRL(tIn) + '</div></div><div class="kpi"><div class="kpi-lbl">Sa\u00EDdas</div><div class="kpi-val" style="color:#ff4757">-' + fBRL(tOut) + '</div></div><div class="kpi"><div class="kpi-lbl">Saldo</div><div class="kpi-val" style="color:' + (bal>=0?'#2ed573':'#ff4757') + '">' + (bal>=0?'+':'') + fBRL(bal) + '</div></div></div>' +
-      '<h2>Sa\u00EDdas por categoria</h2><table><tr><th>Categoria</th><th style="text-align:right">Valor</th><th style="text-align:right">%</th></tr>' +
-      sortedCat.map(([cat, val]) => '<tr><td>' + cat + '</td><td class="vr" style="text-align:right">' + fBRL(val) + '</td><td style="text-align:right;color:#888">' + (tOut?Math.round(val/tOut*100):0) + '%</td></tr>').join('') +
-      '</table><h2>Maiores despesas</h2><table><tr><th>Data</th><th>Descri\u00E7\u00E3o</th><th>Categoria</th><th style="text-align:right">Valor</th></tr>' +
-      me.filter(e=>e.type==='saida').sort((a,b)=>b.value-a.value).slice(0,10).map(e=>'<tr><td>'+e.date.split('-').reverse().join('/')+'</td><td>'+(e.note||e.subcategory||'').slice(0,35)+'</td><td style="color:#888">'+e.category+'</td><td class="vr" style="text-align:right">'+fBRL(e.value)+'</td></tr>').join('') +
-      '</table><h2>Entradas</h2><table><tr><th>Data</th><th>Descri\u00E7\u00E3o</th><th>Categoria</th><th style="text-align:right">Valor</th></tr>' +
-      me.filter(e=>e.type==='entrada').sort((a,b)=>b.value-a.value).map(e=>'<tr><td>'+e.date.split('-').reverse().join('/')+'</td><td>'+(e.note||e.subcategory||'').slice(0,35)+'</td><td style="color:#888">'+e.category+'</td><td class="vg" style="text-align:right">+'+fBRL(e.value)+'</td></tr>').join('') +
-      '</table><div class="ft">Financeiro \u00B7 ' + me.length + ' lan\u00E7amentos \u00B7 ' + formatMonthLabel(mk) + '</div></body></html>';
-    const win = window.open('', '_blank', 'width=900,height=700');
-    win.document.write(htmDoc);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 500);
-  },
-
-  // ================================================================
-  //  END FEATURE ADDITIONS v2
-  // ================================================================
 
   // ---- ANALYTICS ----
   renderAnalytics() {
@@ -2832,7 +2549,7 @@ const App = {
             <div style="font-size:12px;font-weight:500">${e.subcategory || e.category}</div>
             <div style="font-size:10px;color:var(--text3);margin-top:2px">${e.category} · ${e.date.slice(5).replace('-','/')}</div>
           </div>
-          <div style="font-family:Syne,sans-serif;font-weight:800;font-size:14px;color:var(--red)">-${fBRL(e.value)}</div>
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:14px;color:var(--red)">-${fBRL(e.value)}</div>
         </div>`).join('');
     }
 
@@ -2890,7 +2607,7 @@ const App = {
       <div class="card" style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
         <div>
           <div style="font-size:10px;color:var(--text3);letter-spacing:2px;text-transform:uppercase">Total mensal ativo</div>
-          <div style="font-family:Syne,sans-serif;font-weight:800;font-size:22px;color:var(--red)">${fBRL(totalAtivo)}</div>
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:var(--red)">${fBRL(totalAtivo)}</div>
         </div>
         <div style="font-size:11px;color:var(--text3)">${Data.compromissos.filter(c=>c.ativo).length} ativos · ${Data.compromissos.filter(c=>!c.ativo).length} inativos</div>
       </div>
@@ -2958,7 +2675,7 @@ const App = {
         <div class="chart-card" style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
             <div style="font-size:12px;font-weight:600">${cat}</div>
-            <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;color:var(--red)">${fBRL(catTotal)}</div>
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:var(--red)">${fBRL(catTotal)}</div>
           </div>
           ${items.map(c => `
             <div class="rec-row">
@@ -3016,7 +2733,7 @@ const App = {
         <div style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
             <span style="font-size:12px;font-weight:600">${formatMonthLabel(mk)}</span>
-            <span style="font-family:Syne,sans-serif;font-weight:700;font-size:13px;color:var(--red)">${fBRL(total)}</span>
+            <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--red)">${fBRL(total)}</span>
           </div>
           <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:var(--red)"></div></div>
           <div style="font-size:10px;color:var(--text3);margin-top:2px">${items.length} compromisso${items.length !== 1 ? 's' : ''}: ${items.map(i=>i.note).join(', ').slice(0,80)}</div>
@@ -3231,9 +2948,6 @@ const App = {
     const todayStr = today();
     const todayMk  = todayStr.slice(0, 7);
 
-    // ── Projeção de Caixa 90 dias ──
-    const proj90Html = this.buildProjecao90(todayMk);
-
     // 1. Compromissos fixos cadastrados (fonte principal)
     const comVenc = Data.getCompromissosVencimentos(18);
 
@@ -3376,7 +3090,7 @@ const App = {
       html += `</div>`;
     });
 
-    el.innerHTML = proj90Html + html;
+    el.innerHTML = html;
   },
 
   // ---- NET WORTH ----
@@ -3386,24 +3100,13 @@ const App = {
     const totL  = Data.assets.filter(a => a.v < 0).reduce((s, a) => s + a.v, 0);
     const net   = totA + totL;
 
-    // Evolução mensal: acumular saldo mês a mês
-    const nwMonths = Data.getMonths().slice(0, 12).reverse();
-    let accumulated = 0;
-    const evoRows = nwMonths.map(mk => {
-      const tIn  = Data.entries.filter(e => e.type === 'entrada' && monthKey(e.date) === mk).reduce((s,e) => s+e.value, 0);
-      const tOut = Data.entries.filter(e => e.type === 'saida'   && monthKey(e.date) === mk).reduce((s,e) => s+e.value, 0);
-      const saldo = tIn - tOut;
-      accumulated += saldo;
-      return { mk, tIn, tOut, saldo, accumulated };
-    });
-
     let html = `<div class="card" style="text-align:center;margin-bottom:14px">
       <div class="kpi-lbl">Patrimônio líquido</div>
       <div class="nw-total-val" style="color:${net >= 0 ? 'var(--green)' : 'var(--red)'}">${fBRL(net)}</div>
       <div style="font-size:10px;color:var(--text3);margin-top:4px">Ativos ${fBRL(totA)} · Passivos ${fBRL(Math.abs(totL))}</div>
     </div>
     <div class="chart-card">
-      <div class="sec-title" style="margin-top:0">Ativos & Passivos cadastrados</div>
+      <div class="sec-title" style="margin-top:0">Ativos & Passivos</div>
       ${Data.assets.map((a, i) => `
         <div class="nw-item">
           <div>
@@ -3421,25 +3124,6 @@ const App = {
         <input class="add-inp" id="nw-val" type="number" placeholder="Valor (negativo=dívida)" style="max-width:150px">
         <button class="add-btn" onclick="App.addAsset()">+</button>
       </div>
-    </div>
-    <div class="chart-card">
-      <div class="sec-title" style="margin-top:0">📈 Evolução do fluxo de caixa (acumulado)</div>
-      <div style="font-size:10px;color:var(--text3);margin-bottom:10px">Saldo acumulado mês a mês com base nos lançamentos registrados</div>
-      ${evoRows.map(r => {
-        const maxAcc = evoRows.reduce((mx, x) => Math.max(mx, Math.abs(x.accumulated)), 1);
-        const barPct = Math.min(100, Math.abs(r.accumulated) / maxAcc * 100);
-        return `<div class="nw-evo-row">
-          <div>
-            <div style="font-size:11px;font-weight:600">${formatMonthLabel(r.mk)}</div>
-            <div style="font-size:10px;color:var(--text3)">Entradas ${fmtK(r.tIn)} · Saídas ${fmtK(r.tOut)}</div>
-            <div style="width:${barPct}%;height:4px;border-radius:2px;background:${r.accumulated >= 0 ? 'var(--green)' : 'var(--red)'};margin-top:4px;max-width:180px"></div>
-          </div>
-          <div>
-            <div style="font-size:11px;color:${r.saldo >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${r.saldo >= 0 ? '+' : ''}${fBRL(r.saldo)}</div>
-            <div style="font-size:10px;color:var(--text3)">acum. ${r.accumulated >= 0 ? '+' : ''}${fmtK(r.accumulated)}</div>
-          </div>
-        </div>`;
-      }).join('') || '<div class="empty">Sem histórico de lançamentos</div>'}
     </div>`;
     el.innerHTML = html;
   },
