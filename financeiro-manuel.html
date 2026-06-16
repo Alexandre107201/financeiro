@@ -3181,7 +3181,7 @@ const App = {
   //  EMPRESTIMOS ENTRE EMPRESAS
   // ================================================================
 
-  _entLabels: { vilafit: '🏋 Vila Fit', vilagourmet: '🍽 Vila Gourmet', maac: '🏗 MAAC', pessoal: '👤 Pessoal' },
+  _entLabels: { vilafit: '🏋 Vila Fit', vilagourmet: '🍽 Vila Gourmet', maac: '🏗 Vila Sabor', pessoal: '👤 Pessoal' },
   _entBadge:  { vilafit: 'eb-vilafit', vilagourmet: 'eb-vilagourmet', maac: 'eb-maac', pessoal: 'eb-pessoal' },
 
   _getLoans() { return JSON.parse(localStorage.getItem('fm_loans') || '[]'); },
@@ -3241,13 +3241,13 @@ const App = {
       +       '<option value="pessoal">👤 Pessoal</option>'
       +       '<option value="vilafit">🏋 Vila Fit</option>'
       +       '<option value="vilagourmet">🍽 Vila Gourmet</option>'
-      +       '<option value="maac">🏗 MAAC</option>'
+      +       '<option value="maac">🏗 Vila Sabor</option>'
       +     '</select></div>'
       +   '<div><div style="font-size:10px;color:var(--text2);margin-bottom:4px">PARA</div>'
       +     '<select id="loan-to" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
       +       '<option value="vilafit">🏋 Vila Fit</option>'
       +       '<option value="vilagourmet">🍽 Vila Gourmet</option>'
-      +       '<option value="maac">🏗 MAAC</option>'
+      +       '<option value="maac">🏗 Vila Sabor</option>'
       +       '<option value="pessoal">👤 Pessoal</option>'
       +     '</select></div>'
       + '</div>'
