@@ -535,6 +535,28 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
 #gh-btn.ok      { color: var(--green); }
 #gh-btn.err     { color: var(--red); }
 
+
+/* ── Interempresa ── */
+.loan-card{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;}
+.loan-route{font-family:'Syne',sans-serif;font-weight:800;font-size:13px;margin-bottom:4px;}
+.loan-meta{font-size:10px;color:var(--text2);margin-top:2px;}
+.loan-val{font-family:'Syne',sans-serif;font-weight:800;font-size:16px;}
+.loan-status{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700;display:inline-block;margin-top:4px;}
+.loan-status.pendente{background:#FF475720;color:#FF4757;}
+.loan-status.quitado{background:#2ED57320;color:#2ED573;}
+.loan-status.parcial{background:#F5C54220;color:#B8920A;}
+.return-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:1px solid var(--border);font-size:11px;color:var(--text2);}
+.eb{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;}
+.eb-vilafit{background:#6C5CE720;color:#6C5CE7;}
+.eb-vilagourmet{background:#E1705520;color:#E17055;}
+.eb-maac{background:#2ED57320;color:#2ED573;}
+.eb-pessoal{background:#F5C54220;color:#B8920A;}
+.sum-table{width:100%;border-collapse:collapse;font-size:12px;}
+.sum-table th{text-align:left;font-size:10px;color:var(--text2);padding:6px 4px;border-bottom:2px solid var(--border);text-transform:uppercase;}
+.sum-table td{padding:8px 4px;border-bottom:1px solid var(--border);}
+.loan-month-chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:12px;padding-bottom:2px;}
+.loan-month-chip{padding:4px 11px;border-radius:16px;border:1.5px solid var(--border);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--text2);background:var(--surface);}
+.loan-month-chip.active{background:var(--text);color:var(--bg);border-color:var(--text);}
 </style>
 </head>
 <body>
@@ -569,6 +591,7 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
   <button class="nav-btn" data-view="forecast">🔮 Fluxo</button>
   <button class="nav-btn" data-view="analytics">📈 Análise</button>
   <button class="nav-btn" data-view="networth">💎 Patrimônio</button>
+  <button class="nav-btn" data-view="interempresa">🔄 Interempresa</button>
   <button class="nav-btn" data-view="import">📥 Importar</button>
   <button class="nav-btn" data-view="config">⚙ Config</button>
 </div>
@@ -799,6 +822,8 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
 <!-- ================================================================
      VIEW: IMPORT
 ================================================================ -->
+<div id="view-interempresa" class="view"><div id="interempresa-content"></div></div>
+
 <div id="view-import" class="view">
   <div class="imp-opts">
     <input type="file" id="imp-img-file" accept="image/*" multiple style="display:none" onchange="App.importFiles(event,'img')">
@@ -1842,7 +1867,8 @@ const State = {
   curType:    'saida',
   selCat:     '',
   selSub:     '',
-  fMonth:     today().slice(0, 7),  // shared month selector
+  loanMk: null,
+    fMonth:     today().slice(0, 7),  // shared month selector
   dashMode:   'mes',
   expandedSum: null,
   expandedCfg: null,
@@ -1962,6 +1988,7 @@ const App = {
       networth:      () => this.renderNetworth(),
       compromissos:  () => this.renderCompromissos(),
       config:        () => this.renderConfig(),
+      interempresa:  () => this.renderInterempresa(),
     };
     renders[view]?.();
   },
@@ -3148,6 +3175,185 @@ const App = {
     Data.assets.splice(i, 1);
     Data.saveAssets();
     this.renderNetworth();
+  },
+
+  // ================================================================
+  //  EMPRESTIMOS ENTRE EMPRESAS
+  // ================================================================
+
+  _entLabels: { vilafit: '🏋 Vila Fit', vilagourmet: '🍽 Vila Gourmet', maac: '🏗 MAAC', pessoal: '👤 Pessoal' },
+  _entBadge:  { vilafit: 'eb-vilafit', vilagourmet: 'eb-vilagourmet', maac: 'eb-maac', pessoal: 'eb-pessoal' },
+
+  _getLoans() { return JSON.parse(localStorage.getItem('fm_loans') || '[]'); },
+  _saveLoans(loans) { localStorage.setItem('fm_loans', JSON.stringify(loans)); },
+
+  setLoanMonth(mk) { State.loanMk = mk; this.renderInterempresa(); },
+
+  saveLoan() {
+    const from  = document.getElementById('loan-from')?.value;
+    const to    = document.getElementById('loan-to')?.value;
+    const value = parseFloat(document.getElementById('loan-value')?.value);
+    const date  = document.getElementById('loan-date')?.value;
+    const via   = document.getElementById('loan-via')?.value;
+    const note  = document.getElementById('loan-note')?.value || '';
+    if (!from || !to || !value || !date) { alert('Preencha todos os campos.'); return; }
+    if (from === to) { alert('Origem e destino nao podem ser iguais.'); return; }
+    const loans = this._getLoans();
+    loans.push({ id: String(Date.now()), date, from, to, via, value, note, returns: [] });
+    this._saveLoans(loans);
+    this.renderInterempresa();
+  },
+
+  addReturn(loanId) {
+    const val  = parseFloat(document.getElementById('ret-v-' + loanId)?.value);
+    const date = document.getElementById('ret-d-' + loanId)?.value;
+    if (!val || !date) { alert('Informe valor e data.'); return; }
+    const loans = this._getLoans();
+    const loan = loans.find(function(l) { return l.id === loanId; });
+    if (!loan) return;
+    loan.returns = loan.returns || [];
+    loan.returns.push({ date: date, value: val });
+    this._saveLoans(loans);
+    this.renderInterempresa();
+  },
+
+  deleteLoan(loanId) {
+    if (!confirm('Excluir este emprestimo?')) return;
+    this._saveLoans(this._getLoans().filter(function(l) { return l.id !== loanId; }));
+    this.renderInterempresa();
+  },
+
+  renderInterempresa() {
+    const el = document.getElementById('interempresa-content');
+    if (!el) return;
+    const loans   = this._getLoans();
+    const lbl     = this._entLabels;
+    const badge   = this._entBadge;
+    const allEnts = ['pessoal','vilafit','vilagourmet','maac'];
+    const today   = new Date().toISOString().slice(0,10);
+
+    // ── Form ──
+    let html = '<div class="chart-card" style="margin-bottom:12px">'
+      + '<div class="sec-title" style="margin-top:0">➕ Novo emprestimo</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+      +   '<div><div style="font-size:10px;color:var(--text2);margin-bottom:4px">DE</div>'
+      +     '<select id="loan-from" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
+      +       '<option value="pessoal">👤 Pessoal</option>'
+      +       '<option value="vilafit">🏋 Vila Fit</option>'
+      +       '<option value="vilagourmet">🍽 Vila Gourmet</option>'
+      +       '<option value="maac">🏗 MAAC</option>'
+      +     '</select></div>'
+      +   '<div><div style="font-size:10px;color:var(--text2);margin-bottom:4px">PARA</div>'
+      +     '<select id="loan-to" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
+      +       '<option value="vilafit">🏋 Vila Fit</option>'
+      +       '<option value="vilagourmet">🍽 Vila Gourmet</option>'
+      +       '<option value="maac">🏗 MAAC</option>'
+      +       '<option value="pessoal">👤 Pessoal</option>'
+      +     '</select></div>'
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+      +   '<div><div style="font-size:10px;color:var(--text2);margin-bottom:4px">VALOR</div>'
+      +     '<input type="number" id="loan-value" placeholder="0.00" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      +   '<div><div style="font-size:10px;color:var(--text2);margin-bottom:4px">DATA</div>'
+      +     '<input type="date" id="loan-date" value="' + today + '" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      + '</div>'
+      + '<div style="margin-bottom:8px"><div style="font-size:10px;color:var(--text2);margin-bottom:4px">CONTA DE PASSAGEM</div>'
+      +   '<select id="loan-via" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)">'
+      +     '<option value="BB">🏦 Banco do Brasil</option>'
+      +     '<option value="Santander">🏦 Santander</option>'
+      +     '<option value="Ambas">🏦 Ambas</option>'
+      +     '<option value="Direto">🔄 Direto (sem passagem)</option>'
+      +   '</select></div>'
+      + '<div style="margin-bottom:12px"><div style="font-size:10px;color:var(--text2);margin-bottom:4px">OBSERVAÇÃO</div>'
+      +   '<input type="text" id="loan-note" placeholder="Ex: Capital de giro, obra..." style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text)"></div>'
+      + '<button class="btn btn-primary" onclick="App.saveLoan()" style="width:100%">Registrar emprestimo</button>'
+      + '</div>';
+
+    // ── Saldo em aberto ──
+    var bal = {};
+    allEnts.forEach(function(a) { allEnts.forEach(function(b) { if (a!==b) bal[a+'->'+b]=0; }); });
+    loans.forEach(function(loan) {
+      var paid = (loan.returns||[]).reduce(function(s,r){ return s+r.value; },0);
+      var rem  = Math.max(0, loan.value - paid);
+      var k = loan.from + '->' + loan.to;
+      if (bal[k]!==undefined) bal[k] += rem;
+    });
+    var netRows = [];
+    allEnts.forEach(function(a,ai) { allEnts.forEach(function(b,bi) {
+      if (ai>=bi) return;
+      var ab = bal[a+'->'+b]||0, ba = bal[b+'->'+a]||0, net = ab-ba;
+      if (Math.abs(net)>0.01) {
+        var debtor = net>0?b:a, cred = net>0?a:b;
+        netRows.push({ debtor:debtor, cred:cred, val:Math.abs(net) });
+      }
+    }); });
+    if (netRows.length) {
+      html += '<div class="chart-card" style="margin-bottom:12px"><div class="sec-title" style="margin-top:0">📊 Saldo em aberto</div>'
+        + '<table class="sum-table"><tr><th>Devedor</th><th>Credor</th><th style="text-align:right">Saldo</th></tr>';
+      netRows.forEach(function(r) {
+        html += '<tr>'
+          + '<td><span class="eb ' + (badge[r.debtor]||'') + '">' + (lbl[r.debtor]||r.debtor) + '</span></td>'
+          + '<td><span class="eb ' + (badge[r.cred]||'') + '">' + (lbl[r.cred]||r.cred) + '</span></td>'
+          + '<td style="text-align:right;font-family:Syne,sans-serif;font-weight:800;color:var(--red)">' + fBRL(r.val) + '</td>'
+          + '</tr>';
+      });
+      html += '</table></div>';
+    }
+
+    // ── Month tabs ──
+    var months = [];
+    loans.forEach(function(l) { var mk=l.date.slice(0,7); if(!months.includes(mk)) months.push(mk); });
+    months.sort().reverse();
+    var selMk = State.loanMk || (months[0] || today.slice(0,7));
+    State.loanMk = selMk;
+    if (months.length) {
+      html += '<div class="loan-month-chips">';
+      months.forEach(function(mk) {
+        html += '<div class="loan-month-chip' + (mk===selMk?' active':'') + '" onclick="App.setLoanMonth(' + JSON.stringify(mk) + ')">' + mk + '</div>';
+      });
+      html += '</div>';
+    }
+
+    // ── Loans list ──
+    var monthLoans = loans.filter(function(l){ return l.date.slice(0,7)===selMk; });
+    monthLoans.sort(function(a,b){ return b.date.localeCompare(a.date); });
+    if (!monthLoans.length) {
+      html += '<div style="text-align:center;padding:30px;color:var(--text2);font-size:12px">Nenhum empréstimo em ' + selMk + '</div>';
+    } else {
+      monthLoans.forEach(function(loan) {
+        var paid = (loan.returns||[]).reduce(function(s,r){ return s+r.value; },0);
+        var rem  = loan.value - paid;
+        var status = rem<=0?'quitado':paid>0?'parcial':'pendente';
+        var statusLbl = {quitado:'✅ Quitado', parcial:'⚡ Parcial', pendente:'⏳ Pendente'};
+        html += '<div class="loan-card">'
+          + '<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+          +   '<div><div class="loan-route">'
+          +     '<span class="eb ' + (badge[loan.from]||'') + '">' + (lbl[loan.from]||loan.from) + '</span>'
+          +     ' → '
+          +     '<span class="eb ' + (badge[loan.to]||'') + '">' + (lbl[loan.to]||loan.to) + '</span>'
+          +   '</div>'
+          +   '<div class="loan-meta">' + loan.date + ' · via ' + (loan.via||'—') + (loan.note?' · '+loan.note:'') + '</div></div>'
+          +   '<div style="text-align:right">'
+          +     '<div class="loan-val" style="color:' + (rem>0?'var(--red)':'var(--green)') + '">' + fBRL(rem>0?rem:loan.value) + '</div>'
+          +     '<div><span class="loan-status ' + status + '">' + statusLbl[status] + '</span></div>'
+          +   '</div>'
+          + '</div>';
+        (loan.returns||[]).forEach(function(r) {
+          html += '<div class="return-row"><span>↙ ' + r.date + '</span><span style="color:var(--green);font-weight:700">+' + fBRL(r.value) + '</span></div>';
+        });
+        if (rem > 0.01) {
+          html += '<div style="display:flex;gap:8px;margin-top:10px">'
+            + '<input type="number" id="ret-v-' + loan.id + '" placeholder="Valor devolvido" style="flex:1;padding:7px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:12px">'
+            + '<input type="date" id="ret-d-' + loan.id + '" value="' + today + '" style="flex:1;padding:7px;border:1.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);font-size:12px">'
+            + '<button class="btn btn-ghost" onclick="App.addReturn(' + JSON.stringify(loan.id) + ')" style="font-size:11px;padding:7px 10px">↙ Devolvido</button>'
+            + '</div>';
+        }
+        html += '<div style="margin-top:8px;text-align:right">'
+          + '<button class="btn btn-ghost" onclick="App.deleteLoan(' + JSON.stringify(loan.id) + ')" style="font-size:10px;color:var(--text3)">🗑 Excluir</button>'
+          + '</div></div>';
+      });
+    }
+    el.innerHTML = html;
   },
 
   // ---- CONFIG ----
