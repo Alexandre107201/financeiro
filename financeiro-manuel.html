@@ -835,6 +835,10 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
     <button class="imp-opt-btn" onclick="document.getElementById('imp-pdf-file').click()">
       <span class="imp-icon">📄</span><span>PDF<br>(fatura/extrato)</span>
     </button>
+    <input type="file" id="imp-txt-file" accept=".txt,text/plain" multiple style="display:none" onchange="App.importFiles(event,'txt')">
+    <button class="imp-opt-btn" onclick="document.getElementById('imp-txt-file').click()">
+      <span class="imp-icon">📋</span><span>TXT<br>(BB Auto-Atend.)</span>
+    </button>
     <button class="imp-opt-btn" onclick="document.getElementById('imp-json-file').click()">
       <span class="imp-icon">📦</span><span>Backup<br>JSON</span>
     </button>
@@ -1373,6 +1377,9 @@ const Classifier = {
 const Parsers = {
   // Try dedicated parsers first; returns array or null
   tryDedicated(text) {
+    if (/SISBB.*Auto-Atend|Auto-Atendimento.*SISBB|ALTUS.*Auto-Atend/is.test(text)) {
+      return this.parseBBSISBB(text);
+    }
     if (/SALDO FATURA ANTERIOR|Lançamentos nesta fatura|ALTUS LIV VISA|OUROCARD|ELO NANQUIM/i.test(text)) {
       return this.parseBBFatura(text);
     }
@@ -1422,7 +1429,34 @@ const Parsers = {
     return out.length ? out : null;
   },
 
-  parseBBExtrato(text) {
+  parseBBSISBB(text) {
+    const out = [];
+    const headerDt = text.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    const fatYear  = headerDt ? headerDt[3] : '2026';
+    const fatMonth = headerDt ? headerDt[2] : '06';
+    const SKIP = /SALDO FATURA ANTERIOR|PGTO DEBITO|SUBTOTAL|SubTotal|Total|SISBB|DEMONSTRATIVO|L A N|Pagamentos|Cr.ditos|Compras|Companhias|Hospitais|Restaurantes|Auto-Atend/i;
+    // Format: DD/MM  DESCRIPTION  CITY  BR  AMOUNT  0,00
+    const LINE_RE = /^(\d{2}\/\d{2})\s+(.+?)\s{3,}[A-Z]{2,3}\s+(-?[\d.]+,\d{2})\s+[\d.,]+\s*$/gm;
+    let m;
+    while ((m = LINE_RE.exec(text)) !== null) {
+      const [, dateRaw, rawDesc, valStr] = m;
+      if (SKIP.test(rawDesc.trim())) continue;
+      const isNeg = valStr.startsWith('-');
+      const val = parseFloat(valStr.replace('-','').replace(/\./g,'').replace(',','.'));
+      if (isNaN(val) || val <= 0) continue;
+      const isParcela = /parc\s*\d+\/\d+/i.test(rawDesc);
+      const [dd, mm2] = dateRaw.split('/');
+      let yr = parseInt(fatYear);
+      if (!isParcela && parseInt(mm2) > parseInt(fatMonth) + 1) yr--;
+      const date = isParcela ? fatYear + '-' + mm2 + '-01' : yr + '-' + mm2 + '-' + dd;
+      const cleanDesc = rawDesc.replace(/\s{2,}[A-Z][A-Z\s]+$/, '').replace(/\s{2,}/g,' ').trim();
+      const tipo = isNeg ? 'entrada' : 'saida';
+      out.push({ data: date, desc: cleanDesc, valor: val, tipo: tipo, ...Classifier.classify(cleanDesc, val) });
+    }
+    return out.length ? out : null;
+  },
+
+    parseBBExtrato(text) {
     const out = [];
     const SKIP = /BB Rende Fácil|Rende Facil|Saldo Anterior|S A L D O|Pagto cartão|Pagamento Fatura|Pix - Rejeitado|Boleto devolvido|Pix-Envio devolvido|SISBB|Agência:|Data Movim\.|MANUEL RAIMUNDO|MANUEL R A M N/i;
     const SKIP_DESC = /^(\d{2}\/\d{2}\/\d{4}|Data Movim|Agência|SISBB|Rende Facil|Saldo)/i;
@@ -3461,6 +3495,8 @@ const App = {
             logger: m => { if (m.status === 'recognizing text') status.textContent = `${i+1}/${files.length} — ${Math.round(m.progress*100)}%: ${file.name}`; }
           });
           text = r.data.text;
+        } else if (kind === 'txt') {
+          text = await file.text();
         } else if (kind === 'pdf') {
           status.textContent = `${i+1}/${files.length} — Lendo PDF: ${file.name}...`;
           text = await this.extractPDFText(file, status);
