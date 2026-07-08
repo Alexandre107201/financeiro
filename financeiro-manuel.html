@@ -1676,39 +1676,58 @@ const Recurrence = {
     }).sort((a, b) => b.avg - a.avg);
   },
 
+  // Identifica o "comerciante" de uma parcela (nota sem o padrão PARC x/y),
+  // usado para agrupar corretamente cada compra parcelada em sua própria série.
+  _parcMerchant(note) {
+    return (note || '').toLowerCase().replace(/parc\s*\d+\/\d+/i, '').replace(/\s+/g, ' ').trim();
+  },
+
   futureInstallments() {
-    const out = []; const seen = new Set();
+    const out = [];
+    // 1) Agrupa por comerciante + total de parcelas (nunca por categoria: duas
+    //    compras diferentes podem ter a mesma categoria e o mesmo número de
+    //    parcelas, e agrupá-las por categoria fazia uma "engolir" a outra).
+    const buckets = new Map();
     Data.entries.filter(e => e.type === 'saida').forEach(e => {
       const m = (e.note || '').match(/parc\s*(\d+)\/(\d+)/i);
       if (!m) return;
       const cur = +m[1], tot = +m[2];
-      if (cur >= tot) return;
-      const k = this.key(e) + '|' + tot;
-      if (seen.has(k)) return; seen.add(k);
-      const series = Data.entries.filter(x =>
-        x.type === 'saida' && this.key(x) === this.key(e) &&
-        (x.note || '').match(new RegExp('/' + tot + '\\b'))
-      );
-      const latest = series.sort((a, b) => {
-        const ma = +((a.note || '').match(/parc\s*(\d+)/i) || [0, 0])[1];
-        const mb = +((b.note || '').match(/parc\s*(\d+)/i) || [0, 0])[1];
-        return mb - ma;
-      })[0];
-      if (!latest) return;
-      const lm = +((latest.note || '').match(/parc\s*(\d+)/i) || [0, 0])[1];
-      const remaining = tot - lm;
-      if (remaining <= 0) return;
-      const baseDate = new Date(monthKey(latest.date) + '-15');
-      for (let i = 1; i <= remaining; i++) {
-        const fd = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, 15);
-        out.push({
-          date: fd.toISOString().slice(0, 10),
-          value: latest.value,
-          note: (latest.note || '').replace(/parc\s*\d+\//i, 'parc ' + (lm + i) + '/'),
-          category: latest.category,
-          banco: latest.banco || '',
-        });
-      }
+      const bk = this._parcMerchant(e.note) + '|' + tot;
+      if (!buckets.has(bk)) buckets.set(bk, []);
+      buckets.get(bk).push({ e, cur, tot });
+    });
+
+    buckets.forEach(items => {
+      // 2) Dentro de cada comerciante+total, agrupa em "clusters" por valor
+      //    (com tolerância), pois o mesmo comerciante pode ter várias compras
+      //    parceladas distintas e concorrentes (ex.: duas compras de 4x na
+      //    farmácia em meses diferentes) — cada uma é uma série própria.
+      const clusters = [];
+      items.forEach(it => {
+        const val = it.e.value;
+        let cluster = clusters.find(c => Math.abs(c.value - val) <= Math.max(2, c.value * 0.03));
+        if (!cluster) { cluster = { value: val, items: [] }; clusters.push(cluster); }
+        cluster.items.push(it);
+      });
+
+      clusters.forEach(cluster => {
+        // 3) Pega a parcela mais recente da série (maior "cur"; empate = data mais recente)
+        cluster.items.sort((a, b) => b.cur - a.cur || new Date(b.e.date) - new Date(a.e.date));
+        const latest = cluster.items[0];
+        const remaining = latest.tot - latest.cur;
+        if (remaining <= 0) return;
+        const baseDate = new Date(monthKey(latest.e.date) + '-15');
+        for (let i = 1; i <= remaining; i++) {
+          const fd = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, 15);
+          out.push({
+            date: fd.toISOString().slice(0, 10),
+            value: latest.e.value,
+            note: (latest.e.note || '').replace(/parc\s*\d+\//i, 'parc ' + (latest.cur + i) + '/'),
+            category: latest.e.category,
+            banco: latest.e.banco || '',
+          });
+        }
+      });
     });
     return out;
   },
