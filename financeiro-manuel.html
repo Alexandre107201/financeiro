@@ -625,6 +625,14 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
     <span class="lbl">Obs (opcional)</span>
     <input id="add-note" class="inp" type="text" placeholder="Ex: NF 1234, parcela 3/12, ref maio...">
   </div>
+  <div style="margin-bottom:14px">
+    <span class="lbl">Banco / cartão (opcional)</span>
+    <input id="add-banco" class="inp" list="banco-list" type="text" placeholder="Ex: Banco do Brasil, Santander...">
+    <datalist id="banco-list">
+      <option value="Banco do Brasil">
+      <option value="Santander">
+    </datalist>
+  </div>
   <div class="ai-row">
     <input id="add-ai-text" class="inp" type="text" placeholder="Descreva: 'gastei 500 gasolina Mustang'" style="flex:1"
       onkeydown="if(event.key==='Enter')App.runTextAI()">
@@ -825,6 +833,11 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
 <div id="view-interempresa" class="view"><div id="interempresa-content"></div></div>
 
 <div id="view-import" class="view">
+  <div style="margin-bottom:14px">
+    <span class="lbl">Banco desta fatura/extrato (opcional, mas recomendado)</span>
+    <input id="imp-banco" class="inp" list="banco-list" type="text" placeholder="Ex: Banco do Brasil, Santander...">
+    <div style="font-size:10px;color:var(--text3);margin-top:4px">Marca todos os lançamentos deste arquivo com o banco escolhido, pra separar o Fluxo por banco automaticamente.</div>
+  </div>
   <div class="imp-opts">
     <input type="file" id="imp-img-file" accept="image/*" multiple style="display:none" onchange="App.importFiles(event,'img')">
     <input type="file" id="imp-pdf-file" accept="application/pdf" multiple style="display:none" onchange="App.importFiles(event,'pdf')">
@@ -924,6 +937,8 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
     <select id="edit-sub" class="modal-sel"></select>
     <div class="lbl">Obs</div>
     <input id="edit-note" class="modal-inp" type="text">
+    <div class="lbl">Banco / cartão</div>
+    <input id="edit-banco" class="modal-inp" list="banco-list" type="text">
     <div class="modal-btns">
       <button class="modal-cancel" onclick="App.closeModal('edit')">Cancelar</button>
       <button class="modal-save" onclick="App.saveEdit()">Salvar</button>
@@ -1139,6 +1154,7 @@ const Data = {
         subcategory: it.subcategoria || it.subcategory || '',
         value:       Math.abs(parseFloat((it.valor || it.value || 0).toString().replace(',', '.')) || 0),
         note:        it.desc || it.note || '',
+        banco:       it.banco || '',
       };
 
       // Validate category
@@ -1424,7 +1440,7 @@ const Parsers = {
         date = `${yr}-${mm2}-${dd}`;
       }
       const cleanDesc = desc.replace(/\s{2,}/g, ' ').trim();
-      out.push({ data: date, desc: cleanDesc, valor: val, tipo: 'saida', ...Classifier.classify(cleanDesc, val) });
+      out.push({ data: date, desc: cleanDesc, valor: val, tipo: 'saida', banco: 'Banco do Brasil', ...Classifier.classify(cleanDesc, val) });
     }
     return out.length ? out : null;
   },
@@ -1451,7 +1467,7 @@ const Parsers = {
       const date = isParcela ? fatYear + '-' + mm2 + '-01' : yr + '-' + mm2 + '-' + dd;
       const cleanDesc = rawDesc.replace(/\s{2,}[A-Z][A-Z\s]+$/, '').replace(/\s{2,}/g,' ').trim();
       const tipo = isNeg ? 'entrada' : 'saida';
-      out.push({ data: date, desc: cleanDesc, valor: val, tipo: tipo, ...Classifier.classify(cleanDesc, val) });
+      out.push({ data: date, desc: cleanDesc, valor: val, tipo: tipo, banco: 'Banco do Brasil', ...Classifier.classify(cleanDesc, val) });
     }
     return out.length ? out : null;
   },
@@ -1491,7 +1507,7 @@ const Parsers = {
       }
       const desc = cands.slice(-2).join(' / ').slice(0, 80).trim();
       if (!desc || SKIP.test(desc)) continue;
-      out.push({ data: date, desc, valor: val, tipo, ...Classifier.classify(desc, val) });
+      out.push({ data: date, desc, valor: val, tipo, banco: 'Banco do Brasil', ...Classifier.classify(desc, val) });
     }
     return out.length ? out : null;
   },
@@ -1561,6 +1577,7 @@ Regras de classificação:
 - Lançamentos "PARC X/Y" são parcelas: use data de vencimento da fatura como data
 - tipo: "saida" = compras/débitos/pagamentos; "entrada" = créditos/recebimentos/Airbnb
 - Ignorar: saldo anterior, pagamento de fatura, DEB AUTOM FAT, totais, BB Rende Fácil, rendimentos automáticos
+- banco: identifique o banco/instituição emissora do cartão ou conta pelo texto do extrato (ex: "Banco do Brasil", "Santander", "Itaú", "Bradesco", "Nubank"). Procure por marcas como "Ourocard"/"BB"/"bb.com.br" = Banco do Brasil; "Santander"/"Ourocard" não, mas "Santander"/"Esfera" = Santander. Se não conseguir identificar com confiança, deixe "" (vazio) — não invente.
 
 Texto do extrato:
 """
@@ -1568,7 +1585,7 @@ ${extractedText.slice(0, 7000)}
 """
 
 Responda APENAS com array JSON (sem markdown, sem texto extra):
-[{"data":"2026-05-15","desc":"COCO BAMBU UBERLANDIA","valor":436.74,"tipo":"saida","categoria":"👤 Pessoal","subcategoria":"Restaurantes (Outros)"}]`;
+[{"data":"2026-05-15","desc":"COCO BAMBU UBERLANDIA","valor":436.74,"tipo":"saida","categoria":"👤 Pessoal","subcategoria":"Restaurantes (Outros)","banco":"Banco do Brasil"}]`;
   },
 
   async parseExtract(text, fatVenc = '') {
@@ -1689,6 +1706,7 @@ const Recurrence = {
           value: latest.value,
           note: (latest.note || '').replace(/parc\s*\d+\//i, 'parc ' + (lm + i) + '/'),
           category: latest.category,
+          banco: latest.banco || '',
         });
       }
     });
@@ -1824,7 +1842,18 @@ const GitHub = {
           added++;
         }
       }
-      if (added > 0) {
+      // Backfill do campo banco em lançamentos que já existem localmente
+      // (não sobrescreve se já tiver banco definido — só preenche o que está vazio)
+      let bancoBackfilled = 0;
+      const remoteByKey = new Map(remote.entries.map(re => [Data.dedupKey(re), re]));
+      for (const local of Data.entries) {
+        if (local.banco) continue;
+        const r = remoteByKey.get(Data.dedupKey(local));
+        if (r && r.banco) { local.banco = r.banco; bancoBackfilled++; }
+      }
+      if (bancoBackfilled > 0) added += 0; // não conta como novo lançamento, só atualização
+
+      if (added > 0 || bancoBackfilled > 0) {
         Data.entries.sort((a, b) => b.date.localeCompare(a.date));
         Data.saveEntries();
       }
@@ -2174,12 +2203,14 @@ const App = {
       subcategory: State.selSub,
       value:       val,
       note:        document.getElementById('add-note').value.trim(),
+      banco:       document.getElementById('add-banco')?.value.trim() || '',
     };
     Data.addEntry(entry);
     GitHub.save();
     // Reset form
     document.getElementById('add-value').value = '';
     document.getElementById('add-note').value = '';
+    document.getElementById('add-banco').value = '';
     document.getElementById('add-date').value = today();
     document.getElementById('photo-preview').style.display = 'none';
     document.getElementById('add-ai-box').classList.remove('visible');
@@ -2306,6 +2337,7 @@ const App = {
         ((e.note || '').toLowerCase().includes(q) ||
          e.category.toLowerCase().includes(q) ||
          (e.subcategory || '').toLowerCase().includes(q) ||
+         (e.banco || '').toLowerCase().includes(q) ||
          String(e.value).includes(q.replace(',', '.')))
       ).sort((a, b) => b.date.localeCompare(a.date));
       document.getElementById('list-month-nav').style.display = '';
@@ -2338,7 +2370,7 @@ const App = {
     return `<div class="entry-card ${e.type}">
       <div class="entry-info">
         <div class="entry-desc">${e.note || e.subcategory || e.category}</div>
-        <div class="entry-meta">${date} · ${e.category}${e.subcategory ? ' › ' + e.subcategory : ''}</div>
+        <div class="entry-meta">${date} · ${e.category}${e.subcategory ? ' › ' + e.subcategory : ''}${e.banco ? ' · 🏦 ' + e.banco : ''}</div>
       </div>
       <div class="entry-right">
         <span class="entry-val ${e.type}">${e.type === 'entrada' ? '+' : '-'}${fBRL(e.value)}</span>
@@ -3090,12 +3122,24 @@ const App = {
       if (tCom    > 0) parts.push(`📌 Fixos ${fBRL(tCom)}`);
       if (tParc   > 0) parts.push(`📋 Parcelas ${fBRL(tParc)}`);
       if (tManual > 0) parts.push(`🗓 Manuais ${fBRL(tManual)}`);
+
+      // Breakdown por banco (cartões: parcelas + lançamentos futuros já identificados com banco)
+      const byBanco = {};
+      [...parc, ...manual].forEach(i => {
+        const b = i.banco || 'Banco não identificado';
+        byBanco[b] = (byBanco[b] || 0) + i.value;
+      });
+      const bancoParts = Object.entries(byBanco)
+        .sort((a,b) => b[1]-a[1])
+        .map(([b,v]) => `${b} ${fBRL(v)}`);
+
       html += `<div class="fc-proj-row">
         <div class="fc-proj-hdr">
           <span style="font-weight:700">${formatMonthLabel(mk)}</span>
           <span style="color:var(--red);font-weight:700">${fBRL(total)}</span>
         </div>
         <div style="font-size:10px;color:var(--text3);margin-top:2px">${parts.join(' · ')}</div>
+        ${bancoParts.length ? `<div style="font-size:10px;color:var(--purple);margin-top:2px">🏦 ${bancoParts.join(' · ')}</div>` : ''}
       </div>`;
     });
     html += `</div>`;
@@ -3127,7 +3171,7 @@ const App = {
           html += `<div class="rec-row">
             <div>
               <div>${(f.note || '').slice(0, 44)}</div>
-              <div class="rec-meta">${f.category}</div>
+              <div class="rec-meta">${f.category}${f.banco ? ' · 🏦 ' + f.banco : ''}</div>
             </div>
             <div style="font-weight:600;color:var(--red)">${fBRL(f.value)}</div>
           </div>`;
@@ -3141,7 +3185,7 @@ const App = {
           html += `<div class="rec-row">
             <div>
               <div>${(e.note || e.subcategory || e.category).slice(0, 44)}</div>
-              <div class="rec-meta">${e.category} · ${e.date.split('-').reverse().join('/')}</div>
+              <div class="rec-meta">${e.category}${e.banco ? ' · 🏦 ' + e.banco : ''} · ${e.date.split('-').reverse().join('/')}</div>
             </div>
             <div style="font-weight:600;color:var(--red)">${fBRL(e.value)}</div>
           </div>`;
@@ -3470,6 +3514,7 @@ const App = {
   async importFiles(event, kind) {
     const files = Array.from(event.target.files);
     if (!files.length) return;
+    const bancoTag = document.getElementById('imp-banco')?.value.trim() || '';
     const status = document.getElementById('imp-status');
     status.style.display = '';
     status.style.color = 'var(--text2)';
@@ -3531,6 +3576,7 @@ const App = {
       const sub = it.subcategoria || it.subcategory || '';
       if (!sub || !(Data.cats[it.categoria] || []).includes(sub))
         it.subcategoria = (Data.cats[it.categoria] || [])[0] || '';
+      if (bancoTag) it.banco = bancoTag; // seleção manual do usuário tem prioridade sobre a IA
     });
 
     State.importBuffer = all;
@@ -3626,6 +3672,7 @@ const App = {
         <select class="imp-sel" onchange="App.chgImpSub(${i},this.value)">
           ${(Data.cats[it.categoria || it.category] || []).map(s => `<option value="${escQ(s)}" ${s === (it.subcategoria || it.subcategory) ? 'selected' : ''}>${s}</option>`).join('')}
         </select>
+        <input class="imp-sel" list="banco-list" placeholder="Banco (opcional)" value="${escQ(it.banco || '')}" onchange="App.chgImpBanco(${i},this.value)">
         <span class="imp-remove" onclick="App.removeImpRow(${i})">✕ remover</span>
       </div>`).join('') + `
       <div class="imp-actions">
@@ -3640,6 +3687,7 @@ const App = {
     this.renderImportResults();
   },
   chgImpSub(i, sub)  { State.importBuffer[i].subcategoria = sub; },
+  chgImpBanco(i, banco) { State.importBuffer[i].banco = banco.trim(); },
   removeImpRow(i) {
     State.importBuffer.splice(i, 1);
     this.renderImportResults();
@@ -3710,6 +3758,7 @@ const App = {
     document.getElementById('edit-value').value = e.value;
     document.getElementById('edit-date').value  = e.date;
     document.getElementById('edit-note').value  = e.note || '';
+    document.getElementById('edit-banco').value = e.banco || '';
     const catSel = document.getElementById('edit-cat');
     catSel.innerHTML = Object.keys(Data.cats).map(c => `<option value="${escQ(c)}" ${c === e.category ? 'selected' : ''}>${c}</option>`).join('');
     this.editFillSubs(e.subcategory);
@@ -3733,6 +3782,7 @@ const App = {
       category:    cat,
       subcategory: sub,
       note:        document.getElementById('edit-note').value,
+      banco:       document.getElementById('edit-banco').value.trim(),
     });
     State.pendingEdit = null;
     this.closeModal('edit');
