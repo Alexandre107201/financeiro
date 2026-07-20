@@ -659,6 +659,7 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
 ================================================================ -->
 <div id="view-list" class="view">
   <input id="list-search" class="inp" type="text" placeholder="🔍 Buscar descrição, valor, categoria..." oninput="App.renderList()" style="margin-bottom:8px">
+  <button id="rev-filter-btn" onclick="App.toggleRevFilter()" style="display:none;margin-bottom:8px;padding:6px 12px;border-radius:20px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:13px;cursor:pointer"></button>
   <div id="list-subtotal" style="display:none;background:var(--card);border-radius:12px;padding:10px 14px;margin-bottom:10px;display:none;gap:12px;flex-wrap:wrap;align-items:center;font-size:13px">
     <span id="list-sub-count" style="color:var(--text2)"></span>
     <span style="flex:1"></span>
@@ -892,6 +893,14 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
       <div style="font-size:11px;color:var(--text2);margin-bottom:6px">Abra este link no celular (expira ao fechar esta aba):</div>
       <textarea id="cfg-link-text" readonly style="width:100%;font-size:10px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);color:var(--text);box-sizing:border-box;height:60px;resize:none" onclick="this.select()"></textarea>
       <button class="btn btn-ghost" style="width:100%;margin-top:6px" onclick="navigator.clipboard.writeText(document.getElementById('cfg-link-text').value).then(()=>alert('Link copiado!'))">📋 Copiar link</button>
+    </div>
+  </div>
+  <div class="sec-title" style="margin-top:24px">🧠 Aprendizado de categorias</div>
+  <div class="card">
+    <div style="font-size:13px;color:var(--text2);margin-bottom:10px" id="cfg-learn-info"></div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-ghost" style="width:100%" onclick="App.reclassifyRevBtn()">🔄 Reclassificar itens "a revisar" com o que aprendi</button>
+      <button class="btn btn-ghost" style="width:100%" onclick="App.clearLearnBtn()">🗑 Limpar aprendizado</button>
     </div>
   </div>
   <div class="sec-title" style="margin-top:24px">Dados & Backup</div>
@@ -1132,6 +1141,11 @@ const Data = {
 
   addEntry(e) {
     this.entries.unshift(e);
+    // Lançamento manual também ensina o classificador
+    if (e.note && e.category && e.subcategory) {
+      this.learnCat(e.note, e.category, e.subcategory);
+      Store.set('fm_learn', this.learnDict);
+    }
     this.saveEntries();
   },
 
@@ -1155,10 +1169,11 @@ const Data = {
         value:       Math.abs(parseFloat((it.valor || it.value || 0).toString().replace(',', '.')) || 0),
         note:        it.desc || it.note || '',
         banco:       it.banco || '',
+        rev:         it._fb ? 1 : 0,
       };
 
       // Validate category
-      if (!this.cats[entry.category]) entry.category = Object.keys(this.cats)[0];
+      if (!this.cats[entry.category]) { entry.category = Object.keys(this.cats)[0]; entry.rev = 1; }
       if (!entry.subcategory || !(this.cats[entry.category] || []).includes(entry.subcategory)) {
         entry.subcategory = (this.cats[entry.category] || [])[0] || '';
       }
@@ -1186,8 +1201,17 @@ const Data = {
   updateEntry(id, changes) {
     const idx = this.entries.findIndex(e => e.id === id);
     if (idx < 0) return;
-    this.entries[idx] = { ...this.entries[idx], ...changes };
-    if (changes.note) this.learnCat(changes.note, this.entries[idx].category, this.entries[idx].subcategory);
+    const before = this.entries[idx];
+    const catChanged =
+      (changes.category    !== undefined && changes.category    !== before.category) ||
+      (changes.subcategory !== undefined && changes.subcategory !== before.subcategory);
+    this.entries[idx] = { ...before, ...changes };
+    const ent = this.entries[idx];
+    // Aprende sempre que a categoria/sub muda OU a descrição muda
+    if ((catChanged || changes.note !== undefined) && ent.note) {
+      this.learnCat(ent.note, ent.category, ent.subcategory);
+    }
+    if (catChanged) ent.rev = 0; // corrigido manualmente → sai da fila de revisão
     this.saveEntries();
     Store.set('fm_learn', this.learnDict);
   },
@@ -1236,14 +1260,48 @@ const Data = {
   },
 
   // Learning dictionary
+  // Fingerprint do comerciante: remove parcelas (PARC 02/06), datas, códigos
+  // numéricos e cidade/UF, ficando só com as palavras que identificam a loja.
+  merchantKey(desc) {
+    return (desc || '')
+      .toLowerCase()
+      .replace(/parc(ela)?\s*\d+\s*\/\s*\d+/g, ' ')  // PARC 02/06
+      .replace(/\d{2}\/\d{2}(\/\d{2,4})?/g, ' ')      // datas
+      .replace(/\b\d{3,}\b/g, ' ')                    // códigos numéricos
+      .replace(/[^a-z ]/g, ' ')                       // só letras
+      .split(/\s+/).filter(t => t.length >= 2)
+      .slice(0, 5).join(' ')
+      .trim();
+  },
   learnCat(desc, cat, sub) {
     if (!desc || !cat || !sub) return;
-    const key = desc.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 32);
-    if (key) this.learnDict[key] = { cat, sub };
+    const key = this.merchantKey(desc);
+    if (key.length >= 3) this.learnDict[key] = { cat, sub };
+    // compatibilidade: mantém também a chave antiga
+    const old = desc.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 32);
+    if (old) this.learnDict[old] = { cat, sub };
   },
   lookupLearn(desc) {
-    const key = (desc || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 32);
-    return this.learnDict[key] || null;
+    const key = this.merchantKey(desc);
+    if (key && this.learnDict[key]) {
+      const v = this.learnDict[key];
+      if (this.cats[v.cat]) return v;
+    }
+    const old = (desc || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 32);
+    if (old && this.learnDict[old]) {
+      const v = this.learnDict[old];
+      if (this.cats[v.cat]) return v;
+    }
+    // fuzzy: match por prefixo entre chaves aprendidas (mín. 6 chars)
+    if (key && key.length >= 6) {
+      for (const k in this.learnDict) {
+        if (k.length >= 6 && (k.startsWith(key) || key.startsWith(k))) {
+          const v = this.learnDict[k];
+          if (this.cats[v.cat]) return v;
+        }
+      }
+    }
+    return null;
   },
 
   // Helpers
@@ -1382,8 +1440,8 @@ const Classifier = {
     for (const [re, cat, sub] of this.rules) {
       if (re.test(d)) return { categoria: cat, subcategoria: sub };
     }
-    // 4. fallback
-    return { categoria: '👤 Pessoal', subcategoria: 'Outros Pessoal' };
+    // 4. fallback (marca _fb para revisão pós-importação)
+    return { categoria: '👤 Pessoal', subcategoria: 'Outros Pessoal', _fb: 1 };
   },
 };
 
@@ -1736,6 +1794,45 @@ const Recurrence = {
 /* ================================================================
    SPARKLINE CANVAS
 ================================================================ */
+/* Gráfico de linhas SVG — evolução mensal por categoria */
+function trendChartSVG(labels, series, opts = {}) {
+  // labels: ['Fev','Mar',...]  series: [{name, color, data:[...]}]
+  const W = opts.w || 340, H = opts.h || 180;
+  const padL = 44, padR = 8, padT = 10, padB = 22;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const allVals = series.flatMap(s => s.data);
+  const max = Math.max(...allVals, 1);
+  const xs = i => padL + (labels.length > 1 ? i / (labels.length - 1) * plotW : plotW / 2);
+  const ys = v => padT + plotH - (v / max) * plotH;
+
+  // Grid horizontal (4 linhas) + labels de valor
+  let grid = '';
+  for (let g = 0; g <= 4; g++) {
+    const v = max / 4 * g, y = ys(v);
+    grid += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="var(--border,#333)" stroke-width="0.5" opacity="0.5"/>`;
+    grid += `<text x="${padL - 5}" y="${y + 3}" text-anchor="end" font-size="8" fill="var(--text3,#888)">${fmtK(v)}</text>`;
+  }
+  // Labels de mês
+  let xLabels = labels.map((l, i) =>
+    `<text x="${xs(i)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="var(--text3,#888)">${l}</text>`).join('');
+
+  // Linhas + pontos
+  let lines = series.map(s => {
+    const pts = s.data.map((v, i) => `${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join(' ');
+    const dots = s.data.map((v, i) =>
+      `<circle cx="${xs(i).toFixed(1)}" cy="${ys(v).toFixed(1)}" r="2.4" fill="${s.color}"/>`).join('');
+    return `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>${dots}`;
+  }).join('');
+
+  const legend = series.map(s =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--text2);margin-right:10px;white-space:nowrap">
+      <span style="width:10px;height:3px;border-radius:2px;background:${s.color};display:inline-block"></span>${s.name}
+    </span>`).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${grid}${xLabels}${lines}</svg>
+    <div style="margin-top:6px;line-height:1.8">${legend}</div>`;
+}
+
 function drawSparkline(canvas, data, color) {
   if (!canvas || data.length < 2) return;
   const c = canvas.getContext('2d');
@@ -2380,16 +2477,36 @@ const App = {
       subEl.style.display = 'none';
     }
 
-    if (!entries.length) { el.innerHTML = '<div class="empty">Nenhum lançamento' + (q ? ' encontrado' : ' neste mês') + '</div>'; return; }
+    // Filtro "A revisar" (itens que caíram no fallback na importação)
+    const revCount = entries.filter(e => e.rev).length;
+    const revBtn = document.getElementById('rev-filter-btn');
+    if (revBtn) {
+      if (revCount > 0 || State.revOnly) {
+        revBtn.style.display = '';
+        revBtn.textContent = State.revOnly
+          ? '✕ Mostrando ' + revCount + ' a revisar — ver todos'
+          : '⚠️ ' + revCount + ' lançamento' + (revCount !== 1 ? 's' : '') + ' a revisar';
+      } else {
+        revBtn.style.display = 'none';
+      }
+    }
+    if (State.revOnly) entries = entries.filter(e => e.rev);
+
+    if (!entries.length) { el.innerHTML = '<div class="empty">Nenhum lançamento' + (q ? ' encontrado' : State.revOnly ? ' a revisar 🎉' : ' neste mês') + '</div>'; return; }
     el.innerHTML = entries.map(e => this.entryCard(e)).join('');
+  },
+
+  toggleRevFilter() {
+    State.revOnly = !State.revOnly;
+    this.renderList();
   },
 
   entryCard(e) {
     const date = e.date.split('-').reverse().join('/');
-    return `<div class="entry-card ${e.type}">
+    return `<div class="entry-card ${e.type}" id="ec-${e.id}">
       <div class="entry-info">
-        <div class="entry-desc">${e.note || e.subcategory || e.category}</div>
-        <div class="entry-meta">${date} · ${e.category}${e.subcategory ? ' › ' + e.subcategory : ''}${e.banco ? ' · 🏦 ' + e.banco : ''}</div>
+        <div class="entry-desc">${e.rev ? '<span title="Categoria automática incerta — revise" style="margin-right:4px">⚠️</span>' : ''}${e.note || e.subcategory || e.category}</div>
+        <div class="entry-meta">${date} · <span onclick="App.inlineEdit('${e.id}')" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px" title="Toque para trocar a categoria">${e.category}${e.subcategory ? ' › ' + e.subcategory : ''}</span>${e.banco ? ' · 🏦 ' + e.banco : ''}</div>
       </div>
       <div class="entry-right">
         <span class="entry-val ${e.type}">${e.type === 'entrada' ? '+' : '-'}${fBRL(e.value)}</span>
@@ -2397,6 +2514,62 @@ const App = {
         <button class="ic-btn" onclick="App.confirmDel('entry', ${JSON.stringify(e.id)})" title="Excluir">✕</button>
       </div>
     </div>`;
+  },
+
+  // ---- EDIÇÃO INLINE (troca rápida de categoria no próprio card) ----
+  inlineEdit(id) {
+    const e = Data.entries.find(x => x.id === id);
+    const card = document.getElementById('ec-' + id);
+    if (!e || !card) return;
+    const catOpts = Object.keys(Data.cats).map(c =>
+      `<option value="${escQ(c)}" ${c === e.category ? 'selected' : ''}>${c}</option>`).join('');
+    const subOpts = (Data.cats[e.category] || []).map(s =>
+      `<option value="${escQ(s)}" ${s === e.subcategory ? 'selected' : ''}>${s}</option>`).join('');
+    card.innerHTML = `
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+        <div class="entry-desc" style="opacity:.7">${e.note || ''} · ${fBRL(e.value)}</div>
+        <select id="il-cat-${id}" class="modal-sel" style="margin:0;font-size:12px" onchange="App.inlineFillSubs('${id}')">${catOpts}</select>
+        <select id="il-sub-${id}" class="modal-sel" style="margin:0;font-size:12px">${subOpts}</select>
+      </div>
+      <div class="entry-right" style="flex-direction:column;gap:6px">
+        <button class="ic-btn" style="color:var(--green);font-size:16px" onclick="App.inlineSave('${id}')" title="Salvar">✓</button>
+        <button class="ic-btn" onclick="App.renderList()" title="Cancelar">✕</button>
+      </div>`;
+  },
+
+  inlineFillSubs(id) {
+    const cat = document.getElementById('il-cat-' + id).value;
+    document.getElementById('il-sub-' + id).innerHTML =
+      (Data.cats[cat] || []).map(s => `<option value="${escQ(s)}">${s}</option>`).join('');
+  },
+
+  inlineSave(id) {
+    const e = Data.entries.find(x => x.id === id);
+    if (!e) return this.renderList();
+    const oldCat = e.category, oldSub = e.subcategory;
+    const cat = document.getElementById('il-cat-' + id).value;
+    const sub = document.getElementById('il-sub-' + id).value;
+    Data.updateEntry(id, { category: cat, subcategory: sub });
+    this.offerRetroApply(id, oldCat, oldSub);
+    this.renderList();
+  },
+
+  // Aplica a nova categoria a lançamentos do mesmo estabelecimento (com confirmação)
+  offerRetroApply(id, oldCat, oldSub) {
+    const ent = Data.entries.find(x => x.id === id);
+    if (!ent || (oldCat === ent.category && oldSub === ent.subcategory)) return;
+    const key = Data.merchantKey(ent.note);
+    if (key.length < 3) return;
+    const similares = Data.entries.filter(x =>
+      x.id !== id &&
+      Data.merchantKey(x.note) === key &&
+      (x.category !== ent.category || x.subcategory !== ent.subcategory)
+    );
+    if (similares.length > 0 &&
+        confirm(`Encontrei ${similares.length} lançamento(s) do mesmo estabelecimento com outra categoria.\n\nAplicar "${ent.category} › ${ent.subcategory}" a todos?`)) {
+      similares.forEach(x => { x.category = ent.category; x.subcategory = ent.subcategory; x.rev = 0; });
+      Data.saveEntries();
+    }
   },
 
   // ---- SUMMARY ----
@@ -2651,6 +2824,42 @@ const App = {
           <div class="bar-bg"><div class="bar-fill" style="width:${Math.round(val/maxVal*100)}%;background:${COLORS[i%COLORS.length]}"></div></div>
           <div class="bar-val">${fBRL(val)}</div>
         </div>`).join('');
+    }
+
+    // ---- Evolução 6 meses por categoria (linha de tendência) ----
+    {
+      // Últimos 6 meses-calendário terminando no mês selecionado
+      const [fy, fm] = State.fMonth.split('-').map(Number);
+      const win = [];
+      for (let k = 5; k >= 0; k--) {
+        const d = new Date(fy, fm - 1 - k, 1);
+        win.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      }
+      const winLabels = win.map(mk => {
+        const [, m] = mk.split('-');
+        return ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][Number(m) - 1];
+      });
+      // Total por categoria na janela → top 5
+      const winCatTotal = {};
+      Data.entries.forEach(e => {
+        if (e.type !== 'saida') return;
+        const mk = monthKey(e.date);
+        if (!win.includes(mk)) return;
+        winCatTotal[e.category] = (winCatTotal[e.category] || 0) + e.value;
+      });
+      const topCats = Object.entries(winCatTotal).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c]) => c);
+      if (topCats.length && win.some(mk => Data.entries.some(e => monthKey(e.date) === mk))) {
+        const series = topCats.map((cat, i) => ({
+          name: cat,
+          color: COLORS[i % COLORS.length],
+          data: win.map(mk => Data.entries
+            .filter(e => e.type === 'saida' && e.category === cat && monthKey(e.date) === mk)
+            .reduce((s, e) => s + e.value, 0)),
+        }));
+        // Linha de total geral (tracejada seria ideal, mas sólida cinza funciona)
+        html += `<div class="sec-title">📈 Evolução 6 meses — top categorias</div>
+          <div class="chart-card">${trendChartSVG(winLabels, series)}</div>`;
+      }
     }
 
     if (top5.length) {
@@ -3489,6 +3698,13 @@ const App = {
 
     const stats = document.getElementById('cfg-stats');
     if (stats) stats.textContent = `${Data.entries.length} lançamentos · ${Object.keys(Data.cats).length} categorias`;
+    const learnInfo = document.getElementById('cfg-learn-info');
+    if (learnInfo) {
+      const nLearn = Object.keys(Data.learnDict).length;
+      const nRev   = Data.entries.filter(e => e.rev).length;
+      learnInfo.innerHTML = `O app já aprendeu <b>${nLearn}</b> estabelecimento(s) a partir das suas correções.` +
+        (nRev > 0 ? ` Há <b style="color:var(--red)">${nRev}</b> lançamento(s) marcado(s) como "a revisar".` : ' Nenhum lançamento pendente de revisão. ✓');
+    }
     const aiStatus = document.getElementById('cfg-ai-status');
     if (aiStatus) {
       const hasKey = !!AI.getKey();
@@ -3501,6 +3717,34 @@ const App = {
       ghStatus.textContent = hasToken ? '✓ Token configurado — sync automático ativo' : '⚠ Token não configurado — dados não sincronizados';
       ghStatus.style.color = hasToken ? 'var(--green)' : 'var(--orange)';
     }
+  },
+
+  reclassifyRevBtn() {
+    // Reaplica o classificador (aprendizado + regras) nos itens "a revisar"
+    let fixed = 0;
+    Data.entries.forEach(e => {
+      if (!e.rev || !e.note) return;
+      const r = Classifier.classify(e.note, e.value);
+      if (!r._fb && Data.cats[r.categoria]) {
+        e.category    = r.categoria;
+        e.subcategory = r.subcategoria;
+        e.rev = 0;
+        fixed++;
+      }
+    });
+    Data.saveEntries();
+    alert(fixed > 0
+      ? `✓ ${fixed} lançamento(s) reclassificado(s) com base no aprendizado.`
+      : 'Nenhum item pôde ser reclassificado ainda. Corrija alguns manualmente no Histórico — o app aprende e aplica nos próximos.');
+    this.renderConfig();
+  },
+
+  clearLearnBtn() {
+    if (!confirm('Apagar todo o aprendizado de categorias? As regras fixas continuam funcionando.')) return;
+    Data.learnDict = {};
+    Store.set('fm_learn', Data.learnDict);
+    this.renderConfig();
+    alert('✓ Aprendizado limpo.');
   },
 
   toggleCfg(cat) {
@@ -3793,6 +4037,9 @@ const App = {
   saveEdit() {
     const id = State.pendingEdit;
     if (!id) return this.closeModal('edit');
+    const before = Data.entries.find(x => x.id === id);
+    const oldCat = before ? before.category : null;
+    const oldSub = before ? before.subcategory : null;
     const cat = document.getElementById('edit-cat').value;
     const sub = document.getElementById('edit-sub').value;
     Data.updateEntry(id, {
@@ -3803,6 +4050,10 @@ const App = {
       note:        document.getElementById('edit-note').value,
       banco:       document.getElementById('edit-banco').value.trim(),
     });
+
+    // Se mudou a categoria, oferece aplicar retroativamente aos semelhantes
+    this.offerRetroApply(id, oldCat, oldSub);
+
     State.pendingEdit = null;
     this.closeModal('edit');
     this.renderList();
