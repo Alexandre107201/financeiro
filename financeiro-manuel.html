@@ -4259,5 +4259,40 @@ document.addEventListener('DOMContentLoaded', () => {
   console.log('[Dedup Guard v2] ativo');
 })();
 </script>
-</body>
+<script>
+/* ===== Guia de Importação por Banco (adicionado em 2026-08-08) =====
+   Mostra na aba Config uma orientação fixa de qual formato usar pra
+   importar fatura de cartão e extrato de conta corrente, por banco. */
+(function(){
+  function insertImportGuide(){
+    const cfg = document.getElementById('view-config');
+    if (!cfg || document.getElementById('import-guide-card')) return;
+    const title = document.createElement('div');
+    title.className = 'sec-title';
+    title.textContent = '📥 Guia de Importação por Banco';
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'import-guide-card';
+    card.innerHTML = '<div style="line-height:1.7">' +
+      '<strong>Banco do Brasil</strong><br>' +
+      '&nbsp;&nbsp;• Extrato / conta corrente → <strong>TXT (BB Auto-Atendimento)</strong><br>' +
+      '&nbsp;&nbsp;• Fatura do cartão de crédito → <strong>PDF</strong><br><br>' +
+      '<strong>Santander</strong><br>' +
+      '&nbsp;&nbsp;• Extrato / conta corrente → <strong>PDF</strong><br>' +
+      '&nbsp;&nbsp;• Fatura do cartão de crédito → <strong>PDF</strong><br><br>' +
+      '<span style="opacity:.6;font-size:.85em">Atualizado em 08/08/2026</span>' +
+      '</div>';
+    if (cfg.firstChild) {
+      cfg.insertBefore(card, cfg.firstChild);
+      cfg.insertBefore(title, card);
+    } else {
+      cfg.appendChild(title);
+      cfg.appendChild(card);
+    }
+  }
+  insertImportGuide();
+  document.addEventListener('DOMContentLoaded', insertImportGuide);
+  setTimeout(insertImportGuide, 500);
+})();
+</script></body>
 </html>
