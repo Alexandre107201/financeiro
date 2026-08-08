@@ -4214,14 +4214,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 <script>
-/* ===== Dedup Guard (adicionado automaticamente em 2026-08-08) =====
+/* ===== Dedup Guard (v2, corrigido em 2026-08-08) =====
    Bloqueia lançamentos duplicados (mesma descrição + valor + tipo) na
-   importação e no lançamento manual, evitando o problema de itens
-   reimportados em datas diferentes (ex: 01/07 e 10/07). */
+   importação e no lançamento manual. */
 (function(){
   function keyOf(e){ return (e.note||'').trim().toLowerCase()+'|'+e.value+'|'+e.type; }
 
-  if (window.Data && typeof Data.importEntries === 'function') {
+  if (typeof Data !== 'undefined' && typeof Data.importEntries === 'function') {
     const _origImportEntries = Data.importEntries.bind(Data);
     Data.importEntries = function(list){
       if (!Array.isArray(list)) return _origImportEntries(list);
@@ -4243,7 +4242,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  if (window.Data && typeof Data.addEntry === 'function') {
+  if (typeof Data !== 'undefined' && typeof Data.addEntry === 'function') {
     const _origAddEntry = Data.addEntry.bind(Data);
     Data.addEntry = function(entry){
       const k = keyOf(entry);
@@ -4257,7 +4256,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  console.log('[Dedup Guard] ativo');
+  console.log('[Dedup Guard v2] ativo');
 })();
 </script>
 </body>
