@@ -4214,11 +4214,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 <script>
-/* ===== Dedup Guard (v2, corrigido em 2026-08-08) =====
-   Bloqueia lançamentos duplicados (mesma descrição + valor + tipo) na
-   importação e no lançamento manual. */
+/* ===== Dedup Guard (v3, corrigido em 2026-08-08) =====
+   Bloqueia lançamentos duplicados (mesma descrição + valor + tipo + DATA) na
+   importação e no lançamento manual. A partir da v3 a chave inclui a data,
+   pra não bloquear por engano lançamentos recorrentes legítimos (ex: tarifa
+   mensal, Pix repetido pra mesma pessoa em dias diferentes). */
 (function(){
-  function keyOf(e){ return (e.note||'').trim().toLowerCase()+'|'+e.value+'|'+e.type; }
+  function keyOf(e){ return (e.note||'').trim().toLowerCase()+'|'+e.value+'|'+e.type+'|'+e.date; }
 
   if (typeof Data !== 'undefined' && typeof Data.importEntries === 'function') {
     const _origImportEntries = Data.importEntries.bind(Data);
@@ -4236,7 +4238,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       if (skipped > 0) {
         console.warn('[Dedup Guard] ' + skipped + ' lançamento(s) duplicado(s) bloqueado(s) na importação.');
-        try { alert('Aviso: ' + skipped + ' lançamento(s) já existiam (mesma descrição e valor) e foram ignorados automaticamente para evitar duplicidade.'); } catch(e){}
+        try { alert('Aviso: ' + skipped + ' lançamento(s) já existiam (mesma descrição, valor e data) e foram ignorados automaticamente para evitar duplicidade.'); } catch(e){}
       }
       return _origImportEntries(filtered);
     };
@@ -4248,15 +4250,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const k = keyOf(entry);
       const dup = Data.entries.some(function(e){ return keyOf(e) === k; });
       if (dup) {
-        console.warn('[Dedup Guard] lançamento duplicado bloqueado:', entry.note, entry.value);
-        try { alert('Este lançamento já existe (mesma descrição, valor e tipo) e não foi adicionado novamente.'); } catch(e){}
+        console.warn('[Dedup Guard] lançamento duplicado bloqueado:', entry.note, entry.value, entry.date);
+        try { alert('Este lançamento já existe (mesma descrição, valor, tipo e data) e não foi adicionado novamente.'); } catch(e){}
         return undefined;
       }
       return _origAddEntry(entry);
     };
   }
 
-  console.log('[Dedup Guard v2] ativo');
+  console.log('[Dedup Guard v3] ativo');
 })();
 </script>
 <script>
