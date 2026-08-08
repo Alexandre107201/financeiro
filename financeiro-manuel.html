@@ -941,9 +941,9 @@ body.dark .month-item { background: var(--surface); color: var(--text2); border-
     <div class="lbl">Data</div>
     <input id="edit-date" class="modal-inp" type="date">
     <div class="lbl">Categoria</div>
-    <select id="edit-cat" class="modal-sel" onchange="App.editFillSubs()"></select>
+    <div style="display:flex;gap:6px;align-items:center"><select id="edit-cat" class="modal-sel" onchange="App.editFillSubs()" style="flex:1;margin:0"></select><button type="button" onclick="window.__editAddCat()" style="flex:0 0 auto;padding:8px 14px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer;font-size:18px;line-height:1" title="Nova categoria">+</button></div>
     <div class="lbl">Subcategoria</div>
-    <select id="edit-sub" class="modal-sel"></select>
+    <div style="display:flex;gap:6px;align-items:center"><select id="edit-sub" class="modal-sel" style="flex:1;margin:0"></select><button type="button" onclick="window.__editAddSub()" style="flex:0 0 auto;padding:8px 14px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer;font-size:18px;line-height:1" title="Nova subcategoria">+</button></div>
     <div class="lbl">Obs</div>
     <input id="edit-note" class="modal-inp" type="text">
     <div class="lbl">Banco / cartão</div>
@@ -4314,6 +4314,45 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     return origClassify(desc, valor);
+  };
+})();
+</script>
+
+<script>
+(function(){
+  window.__editAddCat = function(){
+    var cat = prompt('Nome da nova categoria (pode incluir emoji na frente):');
+    if (!cat) return;
+    cat = cat.trim();
+    if (!cat) return;
+    if (Data.addCategory(cat)) {
+      var sel = document.getElementById('edit-cat');
+      var opt = document.createElement('option');
+      opt.value = cat; opt.textContent = cat; opt.selected = true;
+      sel.appendChild(opt);
+      App.editFillSubs();
+      if (window.GitHub && GitHub.save) GitHub.save();
+    } else {
+      alert('Essa categoria ja existe ou o nome e invalido.');
+    }
+  };
+  window.__editAddSub = function(){
+    var catSel = document.getElementById('edit-cat');
+    var cat = catSel ? catSel.value : '';
+    if (!cat) { alert('Selecione uma categoria primeiro.'); return; }
+    var sub = prompt('Nome da nova subcategoria para \"' + cat + '\":');
+    if (!sub) return;
+    sub = sub.trim();
+    if (!sub) return;
+    if (Data.addSub(cat, sub)) {
+      var subSel = document.getElementById('edit-sub');
+      var opt = document.createElement('option');
+      opt.value = sub; opt.textContent = sub; opt.selected = true;
+      subSel.appendChild(opt);
+      if (window.GitHub && GitHub.save) GitHub.save();
+    } else {
+      alert('Essa subcategoria ja existe ou a categoria e invalida.');
+    }
   };
 })();
 </script>
